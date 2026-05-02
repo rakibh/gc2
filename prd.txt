@@ -1,0 +1,712 @@
+IT MANAGEMENT SYSTEM - PRODUCT REQUIREMENTS DOCUMENT (PRD)
+===========================================================
+Version: 2.0 (Final)
+Status: Approved for Development
+Date: 2026
+Language: English (UI supports English & Bengali)
+
+1. SYSTEM OVERVIEW
+------------------
+A comprehensive web-based IT management system for tracking equipment, 
+network infrastructure, task assignment, and system maintenance in an 
+office environment.
+
+Core Features:
+• Multi-user role-based access (Admin / Standard User)
+• Dynamic Equipment Inventory with custom JSON schema form builder
+• Network Infrastructure Management with equipment linking
+• Task Assignment & Tracking with extended status workflow
+• Real-time Notification System (AJAX polling)
+• Administrative Tools (Backup, Optimize, Logs, Settings)
+
+2. TECHNOLOGY STACK
+-------------------
+Frontend:
+• HTML5
+• Tailwind CSS (Play CDN) for runtime utility generation
+• Alpine.js (local) for reactive UI state management
+• Font Awesome Free 6 (CDN) for icons
+• Inter font family
+• Vanilla JavaScript + Fetch API for AJAX operations
+• Note: CDN allowed for Tailwind & FA as per preference. Local fallback optional.
+
+Backend:
+• PHP 8.3.14 (strict_types enabled, PDO, Repository pattern)
+• MySQL 9.1.0 (InnoDB, utf8mb4)
+• Apache 2.4.62.1
+• Configuration via .env (gitignored)
+
+3. GLOBAL REQUIREMENTS
+----------------------
+3.1 Design & UX
+• Layout: Header (dark, logo, profile, notifications) + Sidebar + Main
+• Responsive: Mobile-first, Tailwind breakpoints
+• Language: English & Bengali support for all UI text
+• Timezone: GMT+6 (Asia/Dhaka)
+• Date Format: dd/mm/yyyy
+• Time Format: 12-hour with AM/PM (hh:mm:ss)
+
+3.2 Security Standards
+• PDO prepared statements only (no raw queries)
+• CSRF token validation on all POST/AJAX requests
+• Input sanitization & validation (client + server)
+• Session: httponly=1, samesite=strict, regenerate_id() on login
+• Role-based access control on every module entry
+• File Uploads: MIME + extension double-check, rename on save, size limits
+• Password Storage: MD5 hash (Explicitly noted as dev/test risk; upgrade to password_hash() recommended for production)
+
+3.3 Session & Auth Rules
+• Session Lifetime: 24–48 hours
+• "Remember Me": Optional checkbox
+• Browser Close: Session cleared | Tab Close: Session persists
+• Login Errors: Generic messages only ("Invalid credentials")
+• Rate Limiting: Max 5 attempts/IP+ID per 10 min → exponential lockout (10m → 30m)
+
+4. MODULE 1: AUTHENTICATION & USER MANAGEMENT
+----------------------------------------------
+4.1 Login System
+• Fields: "Employee ID / Username", Password (show/hide toggle)
+• Validation: ID required, Password min 6 chars (1 letter, 1 number, 1 special)
+• Security: CSRF, rate limiting, session regeneration, generic errors
+• Redirect: Admin → dashboard_admin.php | User → dashboard_user.php
+• Logout: session_destroy(), cache clear, redirect to login
+
+4.2 User Management
+
+a) Roles & Permissions
+• Admin: Full system access, manages all users, views audit logs, admin-only tools
+• Standard User: Can only view/edit own profile (Role, Employee ID, Status locked)
+
+b) Main Interface (list_users.php)
+• Access: Admin Only
+• Layout: Responsive table with pagination (default: 20 records/page)
+• Columns: Profile Photo, Name, Employee ID, Email, Phone, Role, Status, Actions
+• Features: Shorting (Role, Status), User List Export capability
+• Interaction Model: All CRUD operations (Add, View, Edit, Delete, Reset Password) are executed via Modal Dialogs triggered from this page (no separate page navigation)
+
+4.3 User CRUD & Modal Workflows 
+
+a) Add User Modal
+• Fields: Username, Employee ID, Password, Role, Status 
+• Validation: Unique constraints on ID/Username. Password policy enforced.
+• Action: Hash password, save to DB, log audit entry, refresh list
+
+b) Edit User Modal
+• Access Control: Admin edits all fields. Standard User edits only allowed personal fields.
+• Pre-fill: Loads existing data
+• Photo Handling: Upload new, remove, or keep existing
+• Photo Upload: Max 5MB, formats JPEG/JPG/PNG. user can resize photo when upload ratio will be 1:1.
+• Password Change: Optional, must meet policy if updated
+• Validation: Same as Add, with conflict checks
+
+c) View User Modal
+• Layout: Read-only display of all user fields
+• Revision History: Collapsible section showing last 15 revisions (referance design : https://tailwindcss.com/plus/ui-blocks/application-ui/lists/feeds#component-a70becc0d3cc548c2205920a6aa78e94)
+  - Columns: Timestamp, User Responsible, What Changed (e.g., "Role changed to Admin")
+
+d) Delete User Modal
+• Security: User must type "DELETE" to confirm
+• Safeguard: Cannot delete own account
+• Action: Permanent record deletion, cascade cleanup of related logs/assignments
+• Audit: Logged before execution
+
+e) Reset Password Modal
+• Workflow: Admin enters new password → Policy check → Hash & Save
+• Post-Reset: System forces user to change password on next login
+• Notification: Optional alert to user upon reset
+
+f) Profile Management (profile.php)
+• Access: All authenticated users
+• Read-Only Fields: Employee ID, Role, Status
+• Editable Fields: Profile Photo, First/Last Name, Designation Username, Email, Phone, Password
+• Photo Upload: Same limits as admin modals (5MB, JPEG/JPG/PNG)
+• Password Change: Requires current password + new password meeting policy
+• Feedback: Success/error alerts via Alpine.js toast/modal system
+
+5. MODULE 2: TASK MANAGEMENT
+-----------------------------
+5.1 Tab Layout & Counters and Board Structure & Status
+Part 1 : Bord (Design Referance- C:\wamp64\www\gc2\TEMP\part1_task.jpg)
+• To Do (Count): Active tasks not yet started
+• Doing (Count): Tasks currently in progress
+• Past Due (Count): Tasks that have exceeded their deadline
+
+Part 2 : Tab (Design Referance- C:\wamp64\www\gc2\TEMP\part2_task.jpg)
+• All (Count): Where displaying all five types task
+• Done (Count): Successfully completed tasks
+• Dropped (Count): Cancelled or abandoned tasks
+
+5.2 Status Flow Rules
+• Mandatory Progression: A task MUST transition to "Doing" before it can be marked "Done".
+• Auto-Flagging: The system automatically moves tasks from "To Do" or "Doing" to "Past Due" once the deadline timestamp passes.
+• Drop Permissions: Any involved party (Task Creator, Assignee, or Admin) can mark a task as "Dropped" from any active status.
+• Tab Visibility: "Done" and "Dropped" tasks are strictly excluded from the "To Do" tab.
+• Dependencies: Explicitly NOT IMPLEMENTED (per requirements).
+
+5.3. Core Features and Capabilities
+a) Task Creation & Assignment Modal 
+• Create tasks with Task Title, description, deadlines, priority, and recurrence patterns (Recurring: N/A / Daily / Weekly / Monthly patterns).
+• If recurrence patterns select then need choose to Time->Daily, Day->Weekly, Date->Monthly
+• Assign to one or multiple employees or ALL simultaneously. (Design Referance- https://tailwindcss.com/plus/ui-blocks/application-ui/forms/select-menus#component-71d9116be789a254c260369f03472985)
+• Admin/Task Creator-only capability to extend deadlines post-creation.
+• Assignee start task he/she can click a button "Start/Doing"
+
+b) Priority Levels
+• Four-tier priority system: Priority: Low / Medium / High / Urgent (color-coded)
+• Color-coded badges applied across all views and lists.
+
+c) Recurring Tasks
+• Supported patterns: Daily, Weekly, Monthly.
+• System auto-generates next occurrence upon completion or manual trigger.
+• Recurrence metadata stored for tracking and reporting.
+
+d) Attachments
+• Supported formats: PDF, JPG, PNG, JPEG, DOC, DOCX, TXT, XLS, XLSX, CSV, PPT, PPTX, PPS, PPSX, HTML, HTM, XML
+• Max file size: 5MB per attachment
+• MIME + extension double-validation enforced on upload.
+• Stored in secure directory with renamed filenames to prevent collisions.
+
+e) Activity Log & Audit Trail
+• Immutable log tracking: Who changed what, when, and previous vs. new values.
+• Visible in task detail view for transparency and accountability.
+
+f) Bulk Actions
+• Multi-select support for updating status, reassigning users, or dropping tasks.
+• Executes via AJAX with transactional safety.
+
+5.4 Task Pages & UI Components
+a) List View (list_tasks.php)
+• Responsive layout (mobile-first Tailwind CSS breakpoints).
+• Stateless sorting/filtering via URL parameters (zero DB overhead for UI state).
+• Dynamic tab switching with live counters.
+• Color-coded priority badges, status indicators, and assignee avatars.
+
+b) CRUD Operations (Add/Edit/View/Delete)
+• Rendered via Alpine.js reactive modals or slide-over panels.
+• Add/Edit: Pre-filled forms, real-time validation, attachment upload zone, recurrence selector.
+• View: Read-only display with activity log and attached files grid and comment section.
+• Delete: Permanent removal with cascade cleanup of attachments, logs, and notifications. Requires confirmation modal (must type "DELETE" to confirm)
+• Validation: CSRF tokens, input sanitization, required field checks, date/time logic enforcement.
+
+5.5 Search, Filter, Sort & Export
+a) Filtering
+• Date Range (Created/Updated/Deadline)
+• Priority (Low/Medium/High/Urgent)
+• Status (All active tabs or custom status dropdown)
+• Assignee (Single or multi-select dropdown)
+
+b) Sorting
+• Default: Due Date (ASC)
+• Alternatives: Creation Date, Priority Level, Status
+• Stateless: Handled via GET parameters; no UI state saved to DB.
+
+c) Search
+• Free-text search across: Title, Tags, Description, Assignee Names
+• Real-time AJAX debouncing to prevent excessive queries.
+• Match highlighting in results.
+
+d) Export
+• Supported formats: CSV, XLS, XLSX, TXT only
+• Export respects currently active filters, sorting, and search parameters.
+• Exports only visible/selected columns for data consistency.
+
+5.6 Dashboard & Reporting 
+a) Admin Dashboard
+• Total tasks created (system-wide)
+• Pending vs. Completed ratios
+• Performance metrics: Completion rate per user/team
+• Overdue tasks summary with quick-action links
+• Exportable aggregated reports
+
+b) Standard User Dashboard
+• Personal task summary (Assigned vs. Created)
+• "My Tasks" quick view across all statuses
+• Daily/Weekly productivity stats
+• Completion percentage trend
+• Upcoming deadlines (next 7 days)
+
+5.7 Notification Integration
+Trigger Events
+• Task Assigned: All assignees notified
+• Status Changed: Creator + Assignees notified
+• Deadline Approaching/Passed: Assignees + Creator notified ("Past Due" alert)
+• Task Completed: Creator + Assignees notified
+• Task Dropped/Cancelled: All involved parties notified
+
+6. MODULE 3: EQUIPMENT MANAGEMENT (DYNAMIC)
+--------------------------------------------
+6.1 Overview
+
+a) Scope:
+- Dynamic equipment type creation with custom form fields
+- Equipment CRUD operations (Create, Read, Update, Delete)
+- Network information linking
+- Warranty tracking and notifications
+- Column customization (user preferences)
+- Export functionality (CSV/XLSX/XLS/TXT)
+- Search and filtering capabilities
+
+b) Target Users:
+- Admin Users + Standard Users: View, add, edit, delete equipment
+
+
+6.2 Core Features
+
+a) Dynamic Equipment Types
+- Admin Create unlimited equipment types (e.g., Laptop, Desktop, Printer, Router)
+- Define custom fields per equipment type
+- Support for predefined field types:
+  * Text (single line)
+  * Textarea (multi-line)
+  * Number
+  * Date
+  * Select/Dropdown
+  * Checkbox
+  * File Upload (can set file type and max size)
+- Toggle predefined blocks:
+  * Identification (Brand, Model, Serial Number)
+  * Location (Floor, Department, Room)
+  * Status & Condition
+  * Warranty Information
+  * Network Configuration
+- If user (admin) want then they can create predefined block as like equipment types 
+
+b) Equipment Management
+- Add new equipment with dynamic form based on type
+- Edit existing equipment
+- Delete equipment (with confirmation)
+- View equipment details
+- Bulk actions (multi-select)
+- Equipment status tracking:
+  * In Use
+  * Available
+  * Under Repair
+  * Retired
+  * Lost/Stolen
+
+c) Network Integration
+- Link equipment to network configurations
+- Auto-generate network form when "Include Network" is enabled
+- Track IP/MAC addresses, cable numbers, patch panels, switches
+- One-to-one or one-to-many equipment-network relationships
+
+d) Warranty Management
+- Track warranty seller information
+- Record purchase and expiry dates
+- Upload warranty documents (PDF, images)
+- Automatic notifications before expiry:
+  * 30 days before
+  * 15 days before
+  * On expiry date
+
+e) Column Customization
+- Users can show/hide table columns
+- Preferences saved in localStorage (per user, per browser)
+- Default visible columns:
+  * Checkbox (for bulk select)
+  * Type/Category
+  * Brand
+  * Serial Number
+  * Status
+  * Location
+  * Warranty Status
+  * Actions (Edit/Delete)
+
+f) Search & Filtering
+- Filter by equipment type/category
+- Filter by status
+- Filter by location/department
+- Search by:
+  * Label/Name
+  * Serial Number
+  * Brand/Model
+  * Assigned To
+- Date range filters (purchase/warranty dates)
+
+g) Export Functionality
+- Export to CSV format
+- Export to TXT format
+- Export respects current filters and visible columns
+- Include all fields or selected columns only
+
+
+6.3 Functional Requirements
+
+a) Equipment Type Management
+FR-EQ-001: System shall allow admins to create new equipment types
+FR-EQ-002: System shall allow editing equipment type definitions
+FR-EQ-003: System shall validate equipment type name uniqueness
+FR-EQ-004: System shall store form schema as JSON
+FR-EQ-005: System shall prevent deletion of types with existing equipment
+
+b) Equipment CRUD Operations
+FR-EQ-010: System shall display dynamic form based on selected equipment type
+FR-EQ-011: System shall validate required fields before submission
+FR-EQ-012: System shall generate unique identifier for each equipment
+FR-EQ-013: System shall track creation and modification timestamps
+FR-EQ-014: System shall track creator and last modifier user IDs
+FR-EQ-015: System shall support file uploads for warranty documents
+FR-EQ-016: System shall validate file types and sizes (max 10MB per file)
+FR-EQ-017: System shall allow editing of all equipment fields
+FR-EQ-018: System shall require confirmation before deletion
+FR-EQ-019: System shall cascade delete linked network records (optional)
+
+c) Network Integration
+FR-EQ-020: System shall provide toggle to include network information
+FR-EQ-021: System shall validate IP address format (IPv4)
+FR-EQ-022: System shall validate MAC address format
+FR-EQ-023: System shall ensure IP address uniqueness across network table
+FR-EQ-024: System shall allow linking equipment to existing network records
+FR-EQ-025: System shall allow creating new network record during equipment creation
+
+d) Warranty Management
+FR-EQ-030: System shall calculate days until warranty expiry
+FR-EQ-031: System shall trigger notifications at 30, 15, and 0 days before expiry
+FR-EQ-032: System shall allow multiple warranty document uploads
+FR-EQ-033: System shall store warranty documents in /uploads/warranty/ directory
+FR-EQ-034: System shall provide download links for warranty documents
+
+e) List View & Pagination
+FR-EQ-040: System shall display equipment in paginated table (100 per page default)
+FR-EQ-041: System shall provide previous/next pagination controls
+FR-EQ-042: System shall show current page and total pages
+FR-EQ-043: System shall display record count (e.g., "Showing 1-100 of 450")
+
+f) Sorting
+FR-EQ-050: System shall allow sorting by any column (ASC/DESC)
+FR-EQ-051: System shall maintain sort order across pagination
+FR-EQ-052: System shall indicate current sort column and direction visually
+
+g) Column Customization
+FR-EQ-060: System shall provide "Columns" button to toggle visibility
+FR-EQ-061: System shall save column preferences in localStorage
+FR-EQ-062: System shall load saved preferences on page load
+FR-EQ-063: System shall provide default column configuration for new users
+FR-EQ-064: System shall always show critical columns (Actions, ID)
+
+h) Search & Filtering
+FR-EQ-070: System shall provide text search across multiple fields
+FR-EQ-071: System shall provide dropdown filter for equipment types
+FR-EQ-072: System shall provide dropdown filter for status
+FR-EQ-073: System shall update URL with filter parameters
+FR-EQ-074: System shall maintain filters across pagination
+FR-EQ-075: System shall provide "Clear Filters" option
+
+i) Export
+FR-EQ-080: System shall export data in CSV format
+FR-EQ-081: System shall export data in TXT format
+FR-EQ-082: System shall include column headers in export
+FR-EQ-083: System shall respect current filters in export
+FR-EQ-084: System shall escape special characters in CSV
+FR-EQ-085: System shall use UTF-8 encoding for exports
+
+6.4 User Interface Requirements
+
+a) Equipment List Page
+Components:
+- Header with page title "Equipment Inventory"
+- Filter bar:
+  * Equipment Type dropdown
+  * Status dropdown
+  * Search text input
+  * "Clear Filters" button
+- Action bar:
+  * "+ Add Equipment" button (primary)
+  * "Export" dropdown (CSV/TXT)
+  * "Columns" button (toggle modal)
+- Data table:
+  * Sortable column headers
+  * Checkbox column (bulk select)
+  * Pagination controls (bottom)
+  * Record count display
+
+b) Add/Edit Equipment Page
+Components:
+- Equipment Type selector (dropdown, required)
+- Dynamic form sections:
+  * Identification Block (Brand, Model, Serial Number)
+  * Location Block (Floor, Department, Room, Assigned To)
+  * Status & Condition (dropdowns)
+  * Warranty Block (Seller, Purchase Date, Expiry Date, File Upload)
+  * Network Block (toggle to show/hide)
+    - IP Address, MAC Address
+    - Cable Number
+    - Patch Panel (No, Port, Location)
+    - Switch (No, Port, Location)
+  * Custom Fields (based on equipment type schema)
+- Action buttons:
+  * "Save Equipment" (primary)
+  * "Cancel" (secondary)
+
+c) View Equipment Page
+Components:
+- Equipment details in card layout
+- Sections:
+  * Basic Information (Label, Type, Brand, Model, Serial)
+  * Status & Condition
+  * Location Details
+  * Assignment Information
+  * Warranty Information (with document download links)
+  * Network Configuration (if linked)
+  * Custom Fields
+- Action buttons:
+  * "Edit" (primary)
+  * "Back to List" (secondary)
+
+d) Column Customization Modal
+Components:
+- Modal title: "Visible Columns"
+- Checkbox list of all available columns:
+  * Checkbox (Bulk Select)
+  * Type/Category
+  * Brand
+  * Model
+  * Serial Number
+  * Status
+  * Condition
+  * Location
+  * Floor Number
+  * Department
+  * Assigned To
+  * Warranty Status
+  * Created Date
+- "Save" button (closes modal and applies changes)
+
+5.5 Delete Confirmation Modal
+Components:
+- Warning icon
+- Message: "Are you sure you want to delete [Equipment Label]?"
+- Sub-message: "This action cannot be undone."
+- Input field: "Type DELETE to confirm"
+- Options for network info:
+  * Delete associated network info
+  * Keep network info but unassign
+- Buttons:
+  * "Delete Permanently" (danger, disabled until "DELETE" typed)
+  * "Cancel" (secondary)
+
+
+6.5 Validation Rules
+
+a) Equipment Type Validation
+- Name: Required, 2-99 characters, alphanumeric + spaces
+- Slug: Auto-generated from name, lowercase, hyphens allowed
+- Form Schema: Valid JSON structure
+
+b) Equipment Validation
+- Label: Required, 2-99 characters
+- Type: Required, must exist in equipment_types table
+- Serial Number: Optional, must be unique if provided
+- Brand/Model: Optional, 0-50 characters each
+- Status: Required, must be valid enum value
+- Location: Optional, 0-50 characters
+- Department: Optional, 0-50 characters
+- Assigned To: Optional, 0-50 characters
+- Warranty Dates: Optional, valid date format (YYYY-MM-DD)
+- Expiry Date: Must be >= Purchase Date (if both provided)
+
+c) Network Validation
+- IP Address: Required if network enabled, valid IPv4 format
+- MAC Address: Optional, valid MAC format (XX:XX:XX:XX:XX:XX)
+- IP Address: Must be unique in network_info table
+- Port Numbers: Optional, 0-20 characters
+
+d) File Upload Validation
+- Allowed Types: PDF, JPG, JPEG, PNG
+- Max Size: 10MB per file
+- Max Files: 10 files per equipment max
+- Storage: /public/uploads/warranty/
+- Naming: Unique filename (UUID + original extension)
+
+
+6.6 Security Requirements
+
+a) Authorization
+- SEC-EQ-001: All equipment pages require authentication
+- SEC-EQ-002: Standard users can view all equipment
+- SEC-EQ-003: Standard users can add/edit/delete equipment
+- SEC-EQ-004: Admin users have full access
+- SEC-EQ-005: CSRF token required for all POST/PUT/DELETE requests
+
+b) Input Sanitization
+- SEC-EQ-010: Sanitize all text inputs (strip tags, escape special chars)
+- SEC-EQ-011: Validate file uploads (MIME type + extension)
+- SEC-EQ-012: Prevent directory traversal in file uploads
+- SEC-EQ-013: Use prepared statements for all SQL queries
+- SEC-EQ-014: Validate JSON schema before storage
+
+c) File Security
+- SEC-EQ-020: Store uploads outside web root if possible
+- SEC-EQ-021: Rename uploaded files to prevent overwriting
+- SEC-EQ-022: Set restrictive permissions on upload directory (755)
+- SEC-EQ-023: Scan files for malware (optional, future enhancement)
+
+d) Data Protection
+- SEC-EQ-030: Log all equipment modifications (audit trail)
+- SEC-EQ-031: Never expose sensitive data in client-side code
+- SEC-EQ-032: Use HTTPS for all data transmission (production)
+
+
+6.7 Testing Requirements 
+
+a) Unit Tests
+- Test equipment type creation/validation
+- Test equipment CRUD operations
+- Test network linking/unlinking
+- Test warranty date calculations
+- Test file upload validation
+- Test column preference storage/retrieval
+
+b) UI/UX Tests
+- Test responsive design (mobile/tablet/desktop)
+- Test column toggle functionality
+- Test pagination navigation
+- Test sort order persistence
+- Test form validation messages
+- Test file upload progress/feedback
+
+c) Performance Tests0
+- Load test with 10,000 equipment records
+- Export test with 5,000 records
+- Concurrent user test (10 users)
+- Database query optimization verification
+
+d) Security Tests
+- SQL injection prevention
+- XSS prevention in text fields
+- CSRF token validation
+- File upload security (malicious files)
+- Authentication bypass attempts
+- Authorization (user vs admin access)
+
+7. MODULE 4: NETWORK MANAGEMENT
+--------------------------------
+7.1 Core Fields
+• IP Address (unique, IPv4 regex), MAC Address (unique except "N/A")
+• Cable No, Patch Panel (No/Port/Loc), Switch (No/Port/Loc)
+• Attached Equipment (dropdown: unassigned only), Remarks
+
+7.2 Pages & Rules
+• list_network_info: Same features as Equipment list (localStorage prefs, filters, stateless sort, CSV/XLS/XLSX/TXT export)
+• add/edit/view/delete_network: Full CRUD
+• Delete Rule: ONLY allowed if equipment_id IS NULL
+• Assign/Unassign: AJAX updates to equipment_network_map pivot table
+• Notifications: Trigger on all network operations
+
+8. MODULE 5: NOTIFICATIONS
+---------------------------
+8.1 Triggers
+• Equipment/Network: All CRUD & link operations → All signed-in users
+• Task: Assign, status, deadline, complete → Creator + Assignees
+• Warranty: 30/15/0 days → Admin + Responsible person
+• User (Admin): Add/Role/Delete → Admins only
+
+8.2 Features
+• Priority Levels: Low/Med/High/Urgent (Urgent = red badge + sound)
+• Grouping: Batch similar alerts
+• Quick Actions: Mark Done/View from dropdown
+• Mute/Snooze: Per type for 1h/1d
+• Batch Acknowledge: "Mark all as read" / "Acknowledge all"
+• Expiry Logic: Auto-archive old notifications
+• Polling: Configurable 15–60 seconds (default 30s)
+
+8.3 UI Components
+• Header Bell: Badge count, dropdown (last 15), "View All" link
+• Full Page: Filters, pagination, bulk admin actions
+
+9. MODULE 6: TOOLS & SETTINGS (Admin Only)
+-------------------------------------------
+9.1 Database Optimization
+• Runs OPTIMIZE TABLE, shows results & last run timestamp
+
+9.2 Database Backup
+• Admin Toggle: Auto-Backup (Yes/No)
+• If Yes: Schedule (Daily/Weekly/Monthly + Time) + Storage location
+• Manual: Generate .sql, list, download, delete
+• Filename: backup_DBName_YYYYMMDD_HHMMSS.sql
+
+9.3 System Logs
+• Sources: PHP errors, logins, CRUD, admin tools
+• Color-coded: Info/Warning/Error
+• Search, date filter, pagination, clear option
+
+
+9.4 System Settings
+• Key-value store: system_name, timezone, records_per_page, notification_refresh, etc.
+
+9.5 Cache Cleanup
+• Access: All Users
+• Options: System Cache, User Sessions, All
+• Shows files deleted & space freed
+
+9.6 Database Repair
+• Admin Toggle: Auto-Run (Yes/No)
+• If Yes: Schedule (Daily/Weekly + Time) + Off-peak preference
+• Manual: CHECK TABLE → REPAIR TABLE with progress display
+
+10. DATABASE SCHEMA OVERVIEW
+-----------------------------
+Core Tables & Purpose:
+• users: Auth data, roles, status, password (MD5)
+• audit_logs: Action tracking (user, target, old/new JSON values)
+• equipment_types: Dynamic form schemas (JSON)
+• equipments: All equipment records, custom_data (JSON), warranty dates
+• network_info: IP/MAC, patch/switch details, remarks
+• equipment_network_map: Pivot table linking equipment ↔ network
+• tasks: Task records, status, priority, recurrence
+• task_assignees: Multi-user assignment tracking
+• task_attachments: File uploads for tasks
+• notifications: Global event logs
+• user_notifications: Per-user read/acknowledge status
+• system_settings: Config key-value store
+• system_logs: System activity & error logs
+
+Key Design Decisions:
+• JSON for dynamic equipment data & form schemas
+• Pivot table for flexible network linking
+• Stateless UI: Sorting/filtering via URL params only
+• User Preferences: ALL users (Admin + Standard) use localStorage only (zero DB overhead)
+• Indexing: Standard indexes on dates/status/type_id; Generated columns for frequent JSON filters
+
+11. IMPLEMENTATION & SECURITY GUIDELINES
+-----------------------------------------
+• Folder Structure: /config, /core, /modules/*, /views, /public, /storage
+• PDO Setup: ERRMODE_EXCEPTION, EMULATE_PREPARES=false, typed binding
+• Transactions: Mandatory for multi-table ops (Equipment+Network, Task+Assignees)
+• Foreign Keys: CASCADE for attachments/logs, SET NULL for user references
+• Error Handling: Custom handler → system_logs + file logging. display_errors=Off in prod
+• Code Standards: PHP 8.3 strict_types, typed properties, match expressions, PHPDoc comments
+
+12. TESTING CHECKLIST
+----------------------
+• Auth: Valid/invalid login, rate limit, session regen, role redirect
+• Tasks: CRUD, attachments, status flow, recurring logic, bulk actions
+• Equipment: Dynamic form render, network toggle, JSON save/load, warranty alerts
+• Network: IP validation, assign/unassign, delete restriction, list features
+• Notifications: Trigger accuracy, read/ack logic, polling, mute/snooze
+• Tools: Backup generation, optimize/repair dry-run, log filtering, cache clear
+• UI/UX: Mobile responsive, Alpine interactions, form validation, accessibility
+• Performance: 1000+ records list load <2s, JSON query <500ms, polling <1% CPU
+
+13. PERFORMANCE OPTIMIZATION
+-----------------------------
+• Database: Indexes on created_at, status, type_id, warranty_expiry_date. Generated columns for JSON filters.
+• App: PHP OPcache enabled. Asset caching headers. AJAX debouncing on search.
+• Frontend: Lightweight Alpine components. Lazy load heavy lists.
+• Monitoring: Log slow queries (>500ms). Track AJAX error rates. Alert on failed cron jobs.
+
+14. DEPLOYMENT NOTES
+---------------------
+• Server: PHP 8.3+, MySQL 9.1+, Apache, mod_rewrite, write perms on /storage & /uploads
+• Setup: Clone → .env config → run install.sql → set permissions → test endpoints
+• Cron Jobs (Optional):
+  - Daily backup (2 AM)
+  - Hourly task/warranty check
+  - Weekly DB optimize (Sun 3 AM)
+• Post-Deploy: Test auth, uploads, AJAX, timezone, backup, error logs.
+
+===========================================================
+END OF DOCUMENT
+Prepared for internal development & QA reference.
+All agreed changes integrated. No code included.
+===========================================================

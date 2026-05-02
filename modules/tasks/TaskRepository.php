@@ -1,0 +1,537 @@
+<?php
+
+declare(strict_types=1);
+
+namespace Modules\Tasks;
+
+use Core\Repository;
+use PDO;
+use Exception;
+
+class TaskRepository extends Repository
+{
+    /**
+     * Get tasks with advanced filtering.
+     */
+    public function getTasks(array $filters = []): array
+    {
+        // Automation: Check deadlines and trigger notifications
+        $this->checkDeadlines();
+
+        $query = "
+            SELECT t.*, u.username as creator_name, u.profile_photo as creator_photo,
+            GROUP_CONCAT(ua.username SEPARATOR ', ') as assignee_names,
+            GROUP_CONCAT(ua.profile_photo SEPARATOR '|||') as assignee_photos,
+            (SELECT COUNT(*) FROM task_attachments WHERE task_id = t.id) as attachment_count,
+            (SELECT COUNT(*) FROM task_comments WHERE task_id = t.id) as comment_count
+            FROM tasks t
+            LEFT JOIN users u ON t.creator_id = u.id
+            LEFT JOIN task_assignees ta ON t.id = ta.task_id
+            LEFT JOIN users ua ON ta.user_id = ua.id
+            WHERE 1=1
+        ";
+
+        $params = [];
+
+        // Tab Logic
+        if (!empty($filters['tab'])) {
+            if ($filters['tab'] === 'board') {
+                $query .= " AND t.status IN ('todo', 'doing', 'past_due')";
+            } elseif ($filters['tab'] === 'done') {
+                $query .= " AND t.status = 'done'";
+            } elseif ($filters['tab'] === 'dropped') {
+                $query .= " AND t.status = 'dropped'";
+            }
+            // 'all' doesn't need status filter
+        }
+
+        if (!empty($filters['priority'])) {
+            $query .= " AND t.priority = :priority";
+            $params['priority'] = $filters['priority'];
+        }
+
+        if (!empty($filters['assignee_id'])) {
+            $query .= " AND t.id IN (SELECT task_id FROM task_assignees WHERE user_id = :assignee_id)";
+            $params['assignee_id'] = $filters['assignee_id'];
+        }
+
+        if (!empty($filters['search'])) {
+            $query .= " AND (t.title LIKE :search OR t.description LIKE :search OR t.tags LIKE :search OR ua.username LIKE :search)";
+            $params['search'] = '%' . $filters['search'] . '%';
+        }
+
+        $sortBy = $filters['sort_by'] ?? 'deadline';
+        $sortDir = strtoupper($filters['sort_dir'] ?? 'ASC');
+        
+        $allowedSort = ['deadline', 'created_at', 'priority', 'status'];
+        if (!in_array($sortBy, $allowedSort)) $sortBy = 'deadline';
+        
+        $allowedDir = ['ASC', 'DESC'];
+        if (!in_array($sortDir, $allowedDir)) $sortDir = 'ASC';
+        
+        $query .= " GROUP BY t.id ORDER BY $sortBy $sortDir";
+
+        $stmt = $this->db->prepare($query);
+        $stmt->execute($params);
+        return $stmt->fetchAll();
+    }
+
+    /**
+     * Check for overdue and approaching deadlines and trigger notifications.
+     */
+    public function checkDeadlines(): void
+    {
+        // 1. Handle Overdue (Tasks that just passed their deadline)
+        $stmt = $this->db->prepare("
+            SELECT id, title, priority, status 
+            FROM tasks 
+            WHERE status IN ('todo', 'doing') 
+            AND deadline IS NOT NULL 
+            AND deadline < NOW()
+        ");
+        $stmt->execute();
+        $overdueTasks = $stmt->fetchAll();
+
+        $notificationRepo = new \Modules\Notifications\NotificationRepository();
+
+        foreach ($overdueTasks as $task) {
+            $this->db->prepare("UPDATE tasks SET status = 'past_due' WHERE id = ?")->execute([$task['id']]);
+            
+            $assigneesStmt = $this->db->prepare("SELECT user_id FROM task_assignees WHERE task_id = ?");
+            $assigneesStmt->execute([$task['id']]);
+            $assigneeIds = $assigneesStmt->fetchAll(PDO::FETCH_COLUMN);
+            
+            if (!empty($assigneeIds)) {
+                $notificationRepo->createForUsers(
+                    $assigneeIds,
+                    'task_overdue',
+                    "TASK OVERDUE: " . $task['title'],
+                    'high',
+                    ['task_id' => $task['id']]
+                );
+            }
+            $this->logTaskActivity((int)$task['id'], 'status_change', $task['status'], 'past_due');
+        }
+
+        // 2. Handle Approaching (Deadline within next 24 hours)
+        $stmt = $this->db->prepare("
+            SELECT id, title, priority, deadline 
+            FROM tasks 
+            WHERE status IN ('todo', 'doing') 
+            AND deadline IS NOT NULL 
+            AND deadline > NOW() 
+            AND deadline <= DATE_ADD(NOW(), INTERVAL 24 HOUR)
+        ");
+        $stmt->execute();
+        $approachingTasks = $stmt->fetchAll();
+
+        foreach ($approachingTasks as $task) {
+            // Check if already notified in the last 24 hours to avoid spamming
+            $checkStmt = $this->db->prepare("
+                SELECT COUNT(*) FROM notifications 
+                WHERE type = 'task_approaching' 
+                AND JSON_UNQUOTE(JSON_EXTRACT(data, '$.task_id')) = ?
+                AND created_at > DATE_SUB(NOW(), INTERVAL 24 HOUR)
+            ");
+            $checkStmt->execute([$task['id']]);
+            
+            if ((int)$checkStmt->fetchColumn() === 0) {
+                $assigneesStmt = $this->db->prepare("SELECT user_id FROM task_assignees WHERE task_id = ?");
+                $assigneesStmt->execute([$task['id']]);
+                $assigneeIds = $assigneesStmt->fetchAll(PDO::FETCH_COLUMN);
+                
+                if (!empty($assigneeIds)) {
+                    $notificationRepo->createForUsers(
+                        $assigneeIds,
+                        'task_approaching',
+                        "Task deadline approaching (within 24h): " . $task['title'],
+                        'medium',
+                        ['task_id' => $task['id']]
+                    );
+                }
+            }
+        }
+    }
+
+    /**
+     * Get Status Counts for Board/Tabs.
+     */
+    public function getStatusCounts(): array
+    {
+        $stmt = $this->db->query("SELECT status, COUNT(*) as count FROM tasks GROUP BY status");
+        $results = $stmt->fetchAll(PDO::FETCH_KEY_PAIR);
+        
+        return [
+            'todo' => $results['todo'] ?? 0,
+            'doing' => $results['doing'] ?? 0,
+            'past_due' => $results['past_due'] ?? 0,
+            'done' => $results['done'] ?? 0,
+            'dropped' => $results['dropped'] ?? 0,
+            'all' => array_sum($results)
+        ];
+    }
+
+    /**
+     * Get a single task by ID with assignees and attachments.
+     */
+    public function getTaskById(int $id): ?array
+    {
+        $stmt = $this->db->prepare("SELECT t.*, u.username as creator_name, u.profile_photo as creator_photo FROM tasks t LEFT JOIN users u ON t.creator_id = u.id WHERE t.id = ?");
+        $stmt->execute([$id]);
+        $task = $stmt->fetch();
+
+        if (!$task) return null;
+
+        // Get Assignees
+        $stmt = $this->db->prepare("SELECT u.id, u.username, u.profile_photo FROM users u JOIN task_assignees ta ON u.id = ta.user_id WHERE ta.task_id = ?");
+        $stmt->execute([$id]);
+        $task['assignees'] = $stmt->fetchAll();
+
+        // Get Attachments
+        $stmt = $this->db->prepare("SELECT * FROM task_attachments WHERE task_id = ?");
+        $stmt->execute([$id]);
+        $task['attachments'] = $stmt->fetchAll();
+
+        return $task;
+    }
+
+    /**
+     * Create a new task with assignees.
+     */
+    public function createTask(array $data, array $assignees): int
+    {
+        $this->db->beginTransaction();
+        try {
+            $stmt = $this->db->prepare("
+                INSERT INTO tasks (title, description, status, priority, recurrence, recurrence_metadata, deadline, creator_id)
+                VALUES (:title, :description, :status, :priority, :recurrence, :recurrence_metadata, :deadline, :creator_id)
+            ");
+            
+            $stmt->execute([
+                'title' => $data['title'],
+                'description' => $data['description'],
+                'status' => $data['status'] ?? 'todo',
+                'priority' => $data['priority'] ?? 'medium',
+                'recurrence' => $data['recurrence'] ?? 'none',
+                'recurrence_metadata' => $data['recurrence_metadata'] ?? null,
+                'deadline' => $data['deadline'] ?? null,
+                'creator_id' => $data['creator_id']
+            ]);
+
+            $taskId = (int)$this->db->lastInsertId();
+
+            // Insert Assignees
+            if (!empty($assignees)) {
+                $stmt = $this->db->prepare("INSERT INTO task_assignees (task_id, user_id) VALUES (?, ?)");
+                foreach ($assignees as $userId) {
+                    $stmt->execute([$taskId, $userId]);
+                }
+            }
+
+            // Log activity
+            $this->logTaskActivity($taskId, 'create', null, $data['title']);
+
+            // Notify Assignees
+            if (!empty($assignees)) {
+                $notificationRepo = new \Modules\Notifications\NotificationRepository();
+                $notificationRepo->createForUsers(
+                    $assignees,
+                    'task',
+                    "You have been assigned to a new task: " . $data['title'],
+                    $data['priority'],
+                    ['task_id' => $taskId]
+                );
+            }
+
+            $this->db->commit();
+            return $taskId;
+        } catch (Exception $e) {
+            $this->db->rollBack();
+            throw $e;
+        }
+    }
+
+    /**
+     * Update task status with workflow rules and recurrence.
+     */
+    public function updateStatus(int $taskId, string $newStatus): array
+    {
+        $task = $this->getTaskById($taskId);
+        if (!$task) return ['success' => false, 'message' => 'Task not found.'];
+
+        // Workflow Rule: Must be "Doing" before "Done"
+        if ($newStatus === 'done' && $task['status'] !== 'doing') {
+            throw new Exception('Task must be in "Doing" status before it can be marked as "Done".');
+        }
+
+        $this->db->beginTransaction();
+        try {
+            $stmt = $this->db->prepare("UPDATE tasks SET status = ? WHERE id = ?");
+            $result = $stmt->execute([$newStatus, $taskId]);
+            
+            $recurrenceCreated = false;
+            if ($result) {
+                $this->logTaskActivity($taskId, 'status_change', $task['status'], $newStatus);
+                
+                // Notify Assignees of status change
+                $assigneeIds = array_column($task['assignees'], 'id');
+                if (!empty($assigneeIds)) {
+                    $notificationRepo = new \Modules\Notifications\NotificationRepository();
+                    $notificationRepo->createForUsers(
+                        $assigneeIds,
+                        'task',
+                        "Task status updated to " . ucfirst(str_replace('_', ' ', $newStatus)) . ": " . $task['title'],
+                        $task['priority'],
+                        ['task_id' => $taskId]
+                    );
+                }
+
+                // If marked Done and is recurring, create the next occurrence
+                if ($newStatus === 'done' && $task['recurrence'] !== 'none') {
+                    $this->handleRecurrence($task);
+                    $recurrenceCreated = true;
+                }
+            }
+            
+            $this->db->commit();
+            return [
+                'success' => $result,
+                'recurrence' => $recurrenceCreated,
+                'message' => $recurrenceCreated ? 'Task completed! New recurring task has been created.' : 'Task status updated.'
+            ];
+        } catch (Exception $e) {
+            $this->db->rollBack();
+            throw $e;
+        }
+    }
+
+    /**
+     * Calculate and create the next occurrence of a recurring task.
+     */
+    private function handleRecurrence(array $task): void
+    {
+        $meta = is_string($task['recurrence_metadata']) 
+            ? json_decode($task['recurrence_metadata'], true) 
+            : $task['recurrence_metadata'];
+        
+        $nextDeadline = new \DateTime($task['deadline'] ?? 'now');
+
+        if ($task['recurrence'] === 'daily') {
+            $nextDeadline->modify('+1 day');
+            if (!empty($meta['time'])) {
+                list($h, $m) = explode(':', $meta['time']);
+                $nextDeadline->setTime((int)$h, (int)$m);
+            }
+        } elseif ($task['recurrence'] === 'weekly') {
+            $nextDeadline->modify('+1 week');
+            if (!empty($meta['day'])) {
+                // Map day string to DateTime modifier
+                $nextDeadline->modify('next ' . $meta['day']);
+            }
+        } elseif ($task['recurrence'] === 'monthly') {
+            $nextDeadline->modify('+1 month');
+            if (!empty($meta['date'])) {
+                $day = min((int)$meta['date'], (int)$nextDeadline->format('t'));
+                $nextDeadline->setDate((int)$nextDeadline->format('Y'), (int)$nextDeadline->format('m'), $day);
+            }
+        }
+
+        // Prepare data for the next task
+        $stmt = $this->db->prepare("
+            INSERT INTO tasks (title, description, status, priority, recurrence, recurrence_metadata, deadline, creator_id)
+            VALUES (:title, :description, 'todo', :priority, :recurrence, :recurrence_metadata, :deadline, :creator_id)
+        ");
+        
+        $stmt->execute([
+            'title' => $task['title'],
+            'description' => $task['description'],
+            'priority' => $task['priority'],
+            'recurrence' => $task['recurrence'],
+            'recurrence_metadata' => is_array($task['recurrence_metadata']) ? json_encode($task['recurrence_metadata']) : $task['recurrence_metadata'],
+            'deadline' => $nextDeadline->format('Y-m-d H:i:s'),
+            'creator_id' => $task['creator_id']
+        ]);
+
+        $newTaskId = (int)$this->db->lastInsertId();
+
+        // Copy Assignees
+        if (!empty($task['assignees'])) {
+            $assigneeStmt = $this->db->prepare("INSERT INTO task_assignees (task_id, user_id) VALUES (?, ?)");
+            foreach ($task['assignees'] as $u) {
+                $assigneeStmt->execute([$newTaskId, $u['id']]);
+            }
+        }
+
+        $this->logTaskActivity($newTaskId, 'create', null, '[Auto-Generated] ' . $task['title']);
+    }
+
+    /**
+     * Update task details and assignees.
+     */
+    public function updateTask(int $id, array $data, array $assignees): bool
+    {
+        $oldTask = $this->getTaskById($id);
+        if (!$oldTask) return false;
+
+        $this->db->beginTransaction();
+        try {
+            $stmt = $this->db->prepare("
+                UPDATE tasks SET 
+                title = :title, description = :description, status = :status, 
+                priority = :priority, recurrence = :recurrence, 
+                recurrence_metadata = :recurrence_metadata, deadline = :deadline
+                WHERE id = :id
+            ");
+            
+            $stmt->execute([
+                'id' => $id,
+                'title' => $data['title'],
+                'description' => $data['description'],
+                'status' => $data['status'],
+                'priority' => $data['priority'],
+                'recurrence' => $data['recurrence'],
+                'recurrence_metadata' => $data['recurrence_metadata'] ?? null,
+                'deadline' => $data['deadline'] ?: null
+            ]);
+
+            // Sync Assignees
+            $oldAssigneeIds = array_column($oldTask['assignees'], 'id');
+            $this->db->prepare("DELETE FROM task_assignees WHERE task_id = ?")->execute([$id]);
+            if (!empty($assignees)) {
+                $stmt = $this->db->prepare("INSERT INTO task_assignees (task_id, user_id) VALUES (?, ?)");
+                foreach ($assignees as $userId) {
+                    $stmt->execute([$id, (int)$userId]);
+                }
+            }
+
+            // Notifications
+            $notificationRepo = new \Modules\Notifications\NotificationRepository();
+            
+            // 1. Notify newly added assignees
+            $newAssigneeIds = array_diff($assignees, $oldAssigneeIds);
+            if (!empty($newAssigneeIds)) {
+                $notificationRepo->createForUsers(
+                    $newAssigneeIds,
+                    'task',
+                    "You have been assigned to an existing task: " . $data['title'],
+                    $data['priority'],
+                    ['task_id' => $id]
+                );
+            }
+
+            // 2. Notify all current assignees if title or description changed
+            if ($oldTask['title'] !== $data['title'] || $oldTask['description'] !== $data['description']) {
+                if (!empty($assignees)) {
+                    $notificationRepo->createForUsers(
+                        $assignees,
+                        'task',
+                        "Task details updated: " . $data['title'],
+                        $data['priority'],
+                        ['task_id' => $id]
+                    );
+                }
+            }
+
+            // Log activity if status changed
+            if ($oldTask['status'] !== $data['status']) {
+                $this->logTaskActivity($id, 'status_change', $oldTask['status'], $data['status']);
+            }
+
+            $this->db->commit();
+            return true;
+        } catch (Exception $e) {
+            $this->db->rollBack();
+            throw $e;
+        }
+    }
+
+    /**
+     * Add file attachment metadata.
+     */
+    public function addAttachment(int $taskId, string $path, string $name, string $type): bool
+    {
+        $stmt = $this->db->prepare("
+            INSERT INTO task_attachments (task_id, file_path, file_name, file_type)
+            VALUES (?, ?, ?, ?)
+        ");
+        return $stmt->execute([$taskId, $path, $name, $type]);
+    }
+
+    /**
+     * Log task-specific actions.
+     */
+    public function logTaskActivity(int $taskId, string $action, ?string $old, ?string $new): void
+    {
+        $stmt = $this->db->prepare("
+            INSERT INTO audit_logs (user_id, action, target_table, target_id, old_values, new_values)
+            VALUES (:user_id, :action, 'tasks', :task_id, :old, :new)
+        ");
+        
+        $stmt->execute([
+            'user_id' => \Core\Session::get('user_id'),
+            'action' => $action,
+            'task_id' => $taskId,
+            'old' => $old ? json_encode(['value' => $old]) : null,
+            'new' => $new ? json_encode(['value' => $new]) : null
+        ]);
+    }
+
+    /**
+     * Delete a task.
+     */
+    public function deleteTask(int $id): bool
+    {
+        $stmt = $this->db->prepare("DELETE FROM tasks WHERE id = ?");
+        return $stmt->execute([$id]);
+    }
+
+    /**
+     * Get comments for a task.
+     */
+    public function getComments(int $taskId): array
+    {
+        $stmt = $this->db->prepare("
+            SELECT tc.*, u.username, u.profile_photo 
+            FROM task_comments tc
+            JOIN users u ON tc.user_id = u.id
+            WHERE tc.task_id = ?
+            ORDER BY tc.created_at DESC
+        ");
+        $stmt->execute([$taskId]);
+        return $stmt->fetchAll();
+    }
+
+    /**
+     * Add a comment to a task.
+     */
+    public function addComment(int $taskId, int $userId, string $comment): int
+    {
+        $stmt = $this->db->prepare("
+            INSERT INTO task_comments (task_id, user_id, comment)
+            VALUES (?, ?, ?)
+        ");
+        $stmt->execute([$taskId, $userId, $comment]);
+        $commentId = (int)$this->db->lastInsertId();
+
+        // Notify Assignees
+        $task = $this->getTaskById($taskId);
+        if ($task && !empty($task['assignees'])) {
+            $assigneeIds = array_column($task['assignees'], 'id');
+            // Remove the commenter from the notification list
+            $notifyIds = array_filter($assigneeIds, fn($id) => (int)$id !== $userId);
+            
+            if (!empty($notifyIds)) {
+                $notificationRepo = new \Modules\Notifications\NotificationRepository();
+                $notificationRepo->createForUsers(
+                    $notifyIds,
+                    'task',
+                    "New comment on task: " . $task['title'],
+                    $task['priority'],
+                    ['task_id' => $taskId]
+                );
+            }
+        }
+
+        return $commentId;
+    }
+}

@@ -1,0 +1,188 @@
+
+
+a) Scope
+- Capture authentication, CRUD, system tool, and security events
+- Categorize logs by severity level (INFO, WARNING, ERROR, CRITICAL)
+- Advanced filtering, search, and pagination
+- Automatic deletion of logs older than 90 days
+- Manual export 
+- Integration with all core modules
+
+b) Target Users
+- Admin: Full view, filter, export, clear, and configuration access
+
+c) Event Capture
+- Automatic logging on login/logout, password changes, CRUD operations
+- Security violation tracking (CSRF failures, permission denials, brute force)
+- System tool execution (backup, optimize, cache cleanup)
+- Error & exception tracking (PHP, PDO, file system)
+
+d) Log Levels & Categories
+- Levels: INFO, WARNING, ERROR, CRITICAL
+- Categories: auth, equipment, task, network, user, system, security, tool
+
+e) Filtering & Search
+- Date range picker (from/to)
+- Level filter (single/multi-select)
+- Category filter
+- User/IP filter
+- Free-text search across message & context
+
+f) Retention & Cleanup
+- Automatic deletion of logs older than 90 days
+- Configurable retention period (default: 90 days)
+- Cleanup execution logged in system_logs itself
+
+g) Export & Reporting
+- Export filtered results to CSV/TXT
+- Include headers, timestamps, and formatted context
+- UTF-8 encoding, proper CSV escaping
+
+h) Functional Requirements
+FR-LOG-001: System shall capture log entries with timestamp, user_id, IP, level, category, message, and JSON context
+FR-LOG-002: System shall automatically delete log records older than 90 days via scheduled task
+FR-LOG-003: System shall allow admins to configure retention period (default: 90 days)
+FR-LOG-004: System shall provide date range, level, category, user, and IP filters
+FR-LOG-005: System shall support free-text search across message and context fields
+FR-LOG-006: System shall paginate results (50-100 per page) with previous/next controls
+FR-LOG-007: System shall color-code log levels (Green=INFO, Yellow=WARNING, Red=ERROR, Dark Red=CRITICAL)
+FR-LOG-008: System shall allow CSV/TXT export respecting active filters
+FR-LOG-010: System shall log the "log cleared" action itself for audit trail
+FR-LOG-011: System shall prevent editing or updating of existing log entries (append-only)
+FR-LOG-012: System shall capture user_agent and remote_ip for every log entry
+
+i) Logs List Page
+Components:
+- Header: "System Logs"
+- Filter Bar:
+  * Date Range (From/To date pickers)
+  * Level Dropdown (All/Info/Warning/Error/Critical)
+  * Category Dropdown
+  * User/IP Search Input
+  * "Apply Filters" & "Clear Filters" buttons
+- Action Bar:
+  * "Export CSV" / "Export TXT" buttons
+- Data Table:
+  * Color-coded level badges
+  * Expandable row for JSON context
+  * Sortable columns: Timestamp, Level, Category, User, IP, Message
+  * Pagination controls (bottom)
+  * Record count display
+
+j) Context Viewer
+------------------
+- Clicking "View Details" expands a panel
+- Displays formatted JSON context
+- Copy-to-clipboard button
+- Closes on outside click or X button
+
+================================================================
+6. 90-DAY AUTOMATIC RETENTION POLICY
+================================================================
+
+6.1 Policy Definition
+---------------------
+- Default retention period: 90 days
+- Logs older than 90 days from current date/time shall be automatically deleted
+- Retention period configurable via System Settings (key: log_retention_days)
+- Minimum allowed retention: 30 days (safety threshold)
+
+6.2 Cleanup Mechanism
+---------------------
+MySQL Event Scheduler (Recommended)
+CREATE EVENT cleanup_system_logs
+ON SCHEDULE EVERY 1 DAY
+STARTS '2026-01-01 03:00:00'
+DO
+  DELETE FROM system_logs 
+  WHERE created_at < NOW() - INTERVAL (SELECT setting_value FROM system_settings WHERE setting_key='log_retention_days') DAY;
+
+
+6.3 Safety & Compliance
+-----------------------
+- Cleanup runs during off-peak hours (default: 3:00 AM)
+- Batch deletion prevents long-running transactions
+- Cleanup success/failure logged
+- Optional archival step before deletion (if compliance requires >90 days)
+- Admin can pause auto-cleanup via settings toggle
+
+6.4 Configuration UI
+--------------------
+- Settings Page
+- Field: "Log Retention Period (Days)" [Input: Number, Min: 30, Max: 365, Default: 90]
+- Toggle: "Enable Auto-Cleanup" [Yes/No]
+- Schedule: "Cleanup Time" [Time picker, Default: 03:00]
+- STARTS date - dd/mm/yyyy
+
+================================================================
+7. SECURITY & COMPLIANCE RULES
+================================================================
+
+SEC-LOG-001: All log entries are append-only (no UPDATE/DELETE via application)
+SEC-LOG-002: Admin-only access for export, clear, and configuration
+SEC-LOG-003: Sanitize all log inputs to prevent XSS/HTML injection
+SEC-LOG-004: Mask sensitive data in context (passwords, tokens, PII)
+SEC-LOG-005: Log all admin actions on the logs module itself
+SEC-LOG-006: Rate-limit log writes to prevent log flooding attacks
+SEC-LOG-007: Store IP addresses in IPv4/IPv6 compatible format (VARCHAR(45))
+SEC-LOG-008: Comply with data minimization principles (no unnecessary PII logging)
+
+
+8.3 Performance Optimization
+----------------------------
+- Batch inserts for high-frequency events (optional buffer)
+- Index on created_at for fast range queries
+- LIMIT/OFFSET pagination with index usage
+- Avoid logging in tight loops or recursive functions
+- Async logging via queue (future enhancement)
+
+8.4 Integration Points
+----------------------
+- Auth Module: login, logout, failed attempts, password reset
+- Equipment/Task/Network: CRUD actions, status changes, assignments
+- Tools Module: backup, optimize, repair, settings changes
+- Security Middleware: CSRF failures, permission denials, rate limits
+- Error Handler: PHP exceptions, PDO errors, file system failures
+
+================================================================
+9. TESTING REQUIREMENTS
+================================================================
+
+9.1 Unit Tests
+--------------
+- Logger class insertion & context formatting
+- Date range filter logic
+- Retention calculation (90-day threshold)
+- CSV/TXT export formatting
+- Sensitive data masking
+
+9.2 Integration Tests
+---------------------
+- Event triggers from all modules
+- MySQL Event Scheduler execution
+- Cron script batch deletion
+- Filter + pagination combination
+- Export with active filters
+
+9.3 UI/UX Tests
+---------------
+- Color coding accuracy
+- Expandable context viewer
+- Date picker functionality
+- Responsive layout (mobile/tablet/desktop)
+- Confirmation modal flow
+
+9.4 Security Tests
+------------------
+- XSS prevention in log messages
+- Admin-only access enforcement
+- Tamper resistance (no edit/delete via app)
+- Log flooding protection
+- IP/User agent capture accuracy
+
+9.5 Performance Tests
+---------------------
+- Load test: 100,000 log entries
+- Query response time: < 500ms (filtered)
+- Cleanup execution: < 30 seconds (batch mode)
+- Memory usage during export: < 64MB

@@ -1,0 +1,256 @@
+IT MANAGEMENT SYSTEM - PRODUCT REQUIREMENTS DOCUMENT (PRD)
+===========================================================
+Version: 2.0 (Final)
+Status: Approved for Development
+Date: 2026
+Language: English (UI supports English & Bengali)
+
+1. SYSTEM OVERVIEW
+------------------
+A comprehensive web-based IT management system for tracking equipment, 
+network infrastructure, task assignment, and system maintenance in an 
+office environment.
+
+Core Features:
+• Multi-user role-based access (Admin / Standard User)
+• Dynamic Equipment Inventory with custom JSON schema form builder
+• Network Infrastructure Management with equipment linking
+• Task Assignment & Tracking with extended status workflow
+• Real-time Notification System (AJAX polling)
+• Administrative Tools (Backup, Optimize, Logs, Settings)
+
+2. TECHNOLOGY STACK
+-------------------
+Frontend:
+• HTML5
+• Tailwind CSS (Play CDN) for runtime utility generation
+• Alpine.js (local) for reactive UI state management
+• Font Awesome Free 6 (CDN) for icons
+• Inter font family
+• Vanilla JavaScript + Fetch API for AJAX operations
+• Note: CDN allowed for Tailwind & FA as per preference. Local fallback optional.
+
+Backend:
+• PHP 8.3.14 (strict_types enabled, PDO, Repository pattern)
+• MySQL 9.1.0 (InnoDB, utf8mb4)
+• Apache 2.4.62.1
+• Configuration via .env (gitignored)
+
+3. GLOBAL REQUIREMENTS
+----------------------
+3.1 Design & UX
+• Layout: Header (dark, logo, profile, notifications) + Sidebar + Main
+• Responsive: Mobile-first, Tailwind breakpoints
+• Language: English & Bengali support for all UI text
+• Timezone: GMT+6 (Asia/Dhaka)
+• Date Format: dd/mm/yyyy
+• Time Format: 12-hour with AM/PM (hh:mm:ss)
+
+3.2 Security Standards
+• PDO prepared statements only (no raw queries)
+• CSRF token validation on all POST/AJAX requests
+• Input sanitization & validation (client + server)
+• Session: httponly=1, samesite=strict, regenerate_id() on login
+• Role-based access control on every module entry
+• File Uploads: MIME + extension double-check, rename on save, size limits
+• Password Storage: MD5 hash (Explicitly noted as dev/test risk; upgrade to password_hash() recommended for production)
+
+3.3 Session & Auth Rules
+• Session Lifetime: 24–48 hours
+• "Remember Me": Optional checkbox
+• Browser Close: Session cleared | Tab Close: Session persists
+• Login Errors: Generic messages only ("Invalid credentials")
+• Rate Limiting: Max 5 attempts/IP+ID per 10 min → exponential lockout (10m → 30m)
+
+4. MODULE 1: AUTHENTICATION & USER MANAGEMENT
+----------------------------------------------
+4.1 Login System
+• Fields: "Employee ID / Username", Password (show/hide toggle)
+• Validation: ID required, Password min 6 chars (1 letter, 1 number, 1 special)
+• Security: CSRF, rate limiting, session regeneration, generic errors
+• Redirect: Admin → dashboard_admin.php | User → dashboard_user.php
+• Logout: session_destroy(), cache clear, redirect to login
+
+4.2 User Management
+• Roles: Admin (full access), Standard User (own profile edit only)
+• Password Policy: Min 6 chars, letter+number+special (enforced client/server)
+• Pages: list_users, view_user, add_user, edit_user, delete_user, reset_password, profile
+• view_user, add_user, edit_user, delete_user, reset_password make as Modal Dialogs in list page
+• Audit: All critical actions logged to audit_logs (who, what, old/new values)
+
+5. MODULE 2: TASK MANAGEMENT
+-----------------------------
+5.1 Board Structure & Status
+• Tabs: To Do, Doing, Past Due, Done, Dropped
+• Rules: Must be "Doing" before "Done". "Past Due" auto-flagged. Any involved user can "Drop".
+
+5.2 Core Features
+• Priority: Low / Medium / High / Urgent (color-coded)
+• Recurring: Daily / Weekly / Monthly patterns
+• Attachments: Max 5MB. Formats: PDF, JPG, PNG, JPEG, DOC, DOCX, TXT, XLS, XLSX, CSV, PPT, PPTX, PPS, PPSX, HTML, HTM, XML
+• Activity Log: Track who changed what & when
+• Bulk Actions: Multi-select status/assignee updates
+• Dependencies: NOT IMPLEMENTED (removed per request)
+
+5.3 Task Pages
+• list_tasks: Filter, Sort, Search, Export (CSV/XLS/XLSX/TXT)
+• add/edit/view/delete_task: Full CRUD with validation & notifications
+• Notifications: Trigger on assign, status change, deadline, completion, drop
+
+6. MODULE 3: EQUIPMENT MANAGEMENT (DYNAMIC)
+--------------------------------------------
+6.1 Architecture
+• Single Table Strategy: All types stored in `equipments` table
+• Dynamic Schema: `equipment_types.form_schema` (JSON) defines fields
+• Custom Data: `equipments.custom_data` (JSON) stores values
+• Predefined Blocks: Identification, Location, Status & Condition, Warranty (toggle-able)
+
+6.2 Form Builder & Entry Workflow
+• Admin creates type → toggles blocks → adds custom fields → saves JSON schema
+• "Include Network" toggle adds IP/MAC/Cable/Patch/Switch fields to schema
+• Entry form renders dynamically via Alpine.js
+• Network toggle on entry reveals network fields if enabled
+• Submission: PDO Transaction → equipment + network + map + files + notification
+
+6.3 List Page Features
+• Columns: User-customizable via checkbox modal (saved to localStorage for ALL users)
+• Base Columns (Always Visible): #, Type, Brand, Serial Number, Location, Condition, Warranty (Y/N), Action
+• Filter: Category/Type dropdown
+• Sorting: Stateless ASC/DESC via URL params (no DB save)
+• Export: CSV, XLS, XLSX, TXT only (respects current filters/sorting/visible columns)
+• DOC/PDF export: REMOVED per request
+
+6.4 Warranty & Notifications
+• Auto-notify at 30 days, 15 days, and on expiry date
+• Recipients: Admin + Assigned User
+
+7. MODULE 4: NETWORK MANAGEMENT
+--------------------------------
+7.1 Core Fields
+• IP Address (unique, IPv4 regex), MAC Address (unique except "N/A")
+• Cable No, Patch Panel (No/Port/Loc), Switch (No/Port/Loc)
+• Attached Equipment (dropdown: unassigned only), Remarks
+
+7.2 Pages & Rules
+• list_network_info: Same features as Equipment list (localStorage prefs, filters, stateless sort, CSV/XLS/XLSX/TXT export)
+• add/edit/view/delete_network: Full CRUD
+• Delete Rule: ONLY allowed if equipment_id IS NULL
+• Assign/Unassign: AJAX updates to equipment_network_map pivot table
+• Notifications: Trigger on all network operations
+
+8. MODULE 5: NOTIFICATIONS
+---------------------------
+8.1 Triggers
+• Equipment/Network: All CRUD & link operations → All signed-in users
+• Task: Assign, status, deadline, complete → Creator + Assignees
+• Warranty: 30/15/0 days → Admin + Responsible person
+• User (Admin): Add/Role/Delete → Admins only
+
+8.2 Features
+• Priority Levels: Low/Med/High/Urgent (Urgent = red badge + sound)
+• Grouping: Batch similar alerts
+• Quick Actions: Mark Done/View from dropdown
+• Mute/Snooze: Per type for 1h/1d
+• Batch Acknowledge: "Mark all as read" / "Acknowledge all"
+• Expiry Logic: Auto-archive old notifications
+• Polling: Configurable 15–60 seconds (default 30s)
+
+8.3 UI Components
+• Header Bell: Badge count, dropdown (last 15), "View All" link
+• Full Page: Filters, pagination, bulk admin actions
+
+9. MODULE 6: TOOLS & SETTINGS (Admin Only)
+-------------------------------------------
+9.1 Database Optimization
+• Runs OPTIMIZE TABLE, shows results & last run timestamp
+
+9.2 Database Backup
+• Admin Toggle: Auto-Backup (Yes/No)
+• If Yes: Schedule (Daily/Weekly/Monthly + Time) + Storage location
+• Manual: Generate .sql, list, download, delete
+• Filename: backup_DBName_YYYYMMDD_HHMMSS.sql
+
+9.3 System Logs
+• Sources: PHP errors, logins, CRUD, admin tools
+• Color-coded: Info/Warning/Error
+• Search, date filter, pagination, clear option
+
+9.4 System Settings
+• Key-value store: system_name, timezone, records_per_page, notification_refresh, etc.
+
+9.5 Cache Cleanup
+• Access: All Users
+• Options: System Cache, User Sessions, All
+• Shows files deleted & space freed
+
+9.6 Database Repair
+• Admin Toggle: Auto-Run (Yes/No)
+• If Yes: Schedule (Daily/Weekly + Time) + Off-peak preference
+• Manual: CHECK TABLE → REPAIR TABLE with progress display
+
+10. DATABASE SCHEMA OVERVIEW
+-----------------------------
+Core Tables & Purpose:
+• users: Auth data, roles, status, password (MD5)
+• audit_logs: Action tracking (user, target, old/new JSON values)
+• equipment_types: Dynamic form schemas (JSON)
+• equipments: All equipment records, custom_data (JSON), warranty dates
+• network_info: IP/MAC, patch/switch details, remarks
+• equipment_network_map: Pivot table linking equipment ↔ network
+• tasks: Task records, status, priority, recurrence
+• task_assignees: Multi-user assignment tracking
+• task_attachments: File uploads for tasks
+• notifications: Global event logs
+• user_notifications: Per-user read/acknowledge status
+• system_settings: Config key-value store
+• system_logs: System activity & error logs
+
+Key Design Decisions:
+• JSON for dynamic equipment data & form schemas
+• Pivot table for flexible network linking
+• Stateless UI: Sorting/filtering via URL params only
+• User Preferences: ALL users (Admin + Standard) use localStorage only (zero DB overhead)
+• Indexing: Standard indexes on dates/status/type_id; Generated columns for frequent JSON filters
+
+11. IMPLEMENTATION & SECURITY GUIDELINES
+-----------------------------------------
+• Folder Structure: /config, /core, /modules/*, /views, /public, /storage
+• PDO Setup: ERRMODE_EXCEPTION, EMULATE_PREPARES=false, typed binding
+• Transactions: Mandatory for multi-table ops (Equipment+Network, Task+Assignees)
+• Foreign Keys: CASCADE for attachments/logs, SET NULL for user references
+• Error Handling: Custom handler → system_logs + file logging. display_errors=Off in prod
+• Code Standards: PHP 8.3 strict_types, typed properties, match expressions, PHPDoc comments
+
+12. TESTING CHECKLIST
+----------------------
+• Auth: Valid/invalid login, rate limit, session regen, role redirect
+• Tasks: CRUD, attachments, status flow, recurring logic, bulk actions
+• Equipment: Dynamic form render, network toggle, JSON save/load, warranty alerts
+• Network: IP validation, assign/unassign, delete restriction, list features
+• Notifications: Trigger accuracy, read/ack logic, polling, mute/snooze
+• Tools: Backup generation, optimize/repair dry-run, log filtering, cache clear
+• UI/UX: Mobile responsive, Alpine interactions, form validation, accessibility
+• Performance: 1000+ records list load <2s, JSON query <500ms, polling <1% CPU
+
+13. PERFORMANCE OPTIMIZATION
+-----------------------------
+• Database: Indexes on created_at, status, type_id, warranty_expiry_date. Generated columns for JSON filters.
+• App: PHP OPcache enabled. Asset caching headers. AJAX debouncing on search.
+• Frontend: Lightweight Alpine components. Lazy load heavy lists.
+• Monitoring: Log slow queries (>500ms). Track AJAX error rates. Alert on failed cron jobs.
+
+14. DEPLOYMENT NOTES
+---------------------
+• Server: PHP 8.3+, MySQL 9.1+, Apache, mod_rewrite, write perms on /storage & /uploads
+• Setup: Clone → .env config → run install.sql → set permissions → test endpoints
+• Cron Jobs (Optional):
+  - Daily backup (2 AM)
+  - Hourly task/warranty check
+  - Weekly DB optimize (Sun 3 AM)
+• Post-Deploy: Test auth, uploads, AJAX, timezone, backup, error logs.
+
+===========================================================
+END OF DOCUMENT
+Prepared for internal development & QA reference.
+All agreed changes integrated. No code included.
+===========================================================
