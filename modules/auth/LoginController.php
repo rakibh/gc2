@@ -69,6 +69,7 @@ class LoginController
             Session::set('user_time_format', $prefs['time_format'] ?? '12');
             Session::set('user_toast_position', $prefs['toast_position'] ?? 'bottom-right');
             Session::set('user_desktop_notifications', (bool)($prefs['desktop_notifications'] ?? 0));
+            Session::set('user_notification_types', $prefs['notification_types'] ?? '[]');
 
             $adminRepo->logEvent('info', 'auth', "User logged in: {$user['username']}", [
                 'user_id' => $user['id'],

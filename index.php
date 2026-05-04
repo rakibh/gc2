@@ -395,6 +395,11 @@ try {
             header('Content-Type: application/json');
             echo json_encode((new PreferencesController())->save());
             break;
+
+        case 'global_search':
+            header('Content-Type: application/json');
+            echo json_encode((new \Modules\Admin\GlobalSearchController())->search());
+            break;
             
         case 'dashboard':
         default:

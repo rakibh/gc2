@@ -27,11 +27,20 @@ class PreferencesController
             exit;
         }
 
+        $prefs = $this->preferencesRepository->getByUserId((int)$userId);
+        
+        // Decode JSON notification types
+        if (isset($prefs['notification_types']) && is_string($prefs['notification_types'])) {
+            $prefs['notification_types'] = json_decode($prefs['notification_types'], true) ?: [];
+        } else {
+            $prefs['notification_types'] = $prefs['notification_types'] ?? [];
+        }
+
         return [
             'title' => 'Preferences',
             'view' => 'views/users/preferences.php',
             'data' => [
-                'preferences' => $this->preferencesRepository->getByUserId((int)$userId),
+                'preferences' => $prefs,
                 'timezones' => \DateTimeZone::listIdentifiers()
             ]
         ];
@@ -62,6 +71,8 @@ class PreferencesController
                 Session::set('user_timezone', $data['timezone']);
                 Session::set('user_time_format', $data['time_format']);
                 Session::set('user_toast_position', $data['toast_position']);
+                Session::set('user_desktop_notifications', (int)$data['desktop_notifications']);
+                Session::set('user_notification_types', json_encode($data['notification_types'] ?? []));
                 
                 return ['success' => true, 'message' => 'Preferences saved successfully.'];
             }

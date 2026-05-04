@@ -196,6 +196,13 @@ class TaskController
 
     private function handleUploads(int $taskId, array $files): void
     {
+        $settingsRepo = new \Modules\Admin\SettingsRepository();
+        $maxSizeMB = (int)$settingsRepo->get('task_max_upload_size', '5');
+        $allowedExtStr = $settingsRepo->get('task_allowed_extensions', 'pdf,jpg,png,jpeg,doc,docx,txt,xls,xlsx,csv');
+        $allowedExtensions = array_map('trim', explode(',', strtolower($allowedExtStr)));
+
+        $maxSizeBytes = $maxSizeMB * 1024 * 1024;
+
         $storageDir = __DIR__ . '/../../storage/uploads/tasks/' . $taskId . '/';
         if (!is_dir($storageDir)) mkdir($storageDir, 0777, true);
 
@@ -203,16 +210,17 @@ class TaskController
             if ($files['error'][$key] === UPLOAD_ERR_OK) {
                 $size = $files['size'][$key];
                 $tmp = $files['tmp_name'][$key];
-                $type = $files['type'][$key];
+                $extension = strtolower(pathinfo($name, PATHINFO_EXTENSION));
 
-                // Validate: Max 5MB, PDF or Image
-                if ($size > 5 * 1024 * 1024) continue;
-                if (!in_array($type, ['application/pdf', 'image/jpeg', 'image/png', 'image/webp'])) continue;
+                // Validate: Settings-based
+                if ($size > $maxSizeBytes) continue;
+                if (!in_array($extension, $allowedExtensions)) continue;
 
                 $fileName = time() . '_' . basename($name);
                 $destination = $storageDir . $fileName;
 
                 if (move_uploaded_file($tmp, $destination)) {
+                    $type = $files['type'][$key];
                     $this->taskRepository->addAttachment($taskId, 'storage/uploads/tasks/' . $taskId . '/' . $fileName, $name, $type);
                 }
             }

@@ -15,9 +15,10 @@ $statusColors = [
 ];
 ?>
 
-<div class="max-w-7xl mx-auto space-y-8" x-data="equipmentList()">
+<div class="space-y-8" x-data="equipmentList()">
     <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
+            <h1 class="text-2xl font-black text-slate-900 dark:text-white">Equipment Inventory</h1>
             <p class="text-sm text-slate-500 dark:text-slate-400">Manage and track all company hardware assets.</p>
         </div>
         <div class="flex items-center gap-3">
@@ -104,6 +105,17 @@ $statusColors = [
                                     </template>
                                     <template x-if="col.id === 'location'">
                                         <span class="text-xs font-medium text-slate-600 dark:text-slate-400"><?php echo htmlspecialchars($e['location'] ?? 'Not Set'); ?></span>
+                                    </template>
+                                    <template x-if="col.id === 'floor'">
+                                        <span class="text-xs font-medium text-slate-600 dark:text-slate-400"><?php echo htmlspecialchars($e['floor'] ?? 'N/A'); ?></span>
+                                    </template>
+                                    <template x-if="col.id === 'department'">
+                                        <span class="text-xs font-medium text-slate-600 dark:text-slate-400"><?php echo htmlspecialchars($e['department'] ?? 'N/A'); ?></span>
+                                    </template>
+                                    <template x-if="col.id === 'condition'">
+                                        <span class="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider border border-slate-200 dark:border-slate-700 text-slate-500">
+                                            <?php echo htmlspecialchars($e['condition'] ?? 'Excellent'); ?>
+                                        </span>
                                     </template>
                                     <template x-if="col.id === 'network'">
                                         <div class="flex flex-col">
@@ -207,6 +219,9 @@ function equipmentList() {
             { id: 'brand_model', label: 'Brand & Model', visible: true },
             { id: 'status', label: 'Status', visible: true },
             { id: 'location', label: 'Location', visible: true },
+            { id: 'floor', label: 'Floor No', visible: true },
+            { id: 'department', label: 'Department', visible: true },
+            { id: 'condition', label: 'Condition', visible: true },
             { id: 'network', label: 'Network Info', visible: true },
             { id: 'warranty', label: 'Warranty Status', visible: false },
             { id: 'created_at', label: 'Date Added', visible: false }

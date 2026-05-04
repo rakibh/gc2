@@ -168,6 +168,8 @@ class EquipmentController
             $existingEquipment = $id ? $this->equipmentRepository->getEquipmentById($id) : null;
             $currentImages = $existingEquipment ? (json_decode($existingEquipment['images'] ?? '[]', true) ?: []) : [];
 
+            $settingsRepo = new \Modules\Admin\SettingsRepository();
+
             // Handle Image Deletions
             if (!empty($data['images_to_delete'])) {
                 $toDelete = is_string($data['images_to_delete']) ? json_decode($data['images_to_delete'], true) : $data['images_to_delete'];
@@ -201,15 +203,18 @@ class EquipmentController
             // Handle Warranty File Upload
             if (isset($_FILES['warranty_document']) && $_FILES['warranty_document']['error'] === UPLOAD_ERR_OK) {
                 $upload = $_FILES['warranty_document'];
-                $allowed = ['pdf', 'jpg', 'jpeg', 'png', 'gif'];
+                $maxSizeMB = (int)$settingsRepo->get('warranty_max_upload_size', '10');
+                $allowedExtStr = $settingsRepo->get('warranty_allowed_extensions', 'pdf,jpg,png,jpeg');
+                $allowedExtensions = array_map('trim', explode(',', strtolower($allowedExtStr)));
+                
                 $ext = strtolower(pathinfo($upload['name'], PATHINFO_EXTENSION));
                 
-                if (!in_array($ext, $allowed)) {
-                    return ['success' => false, 'message' => 'Invalid file type. Only PDF and images allowed.'];
+                if (!in_array($ext, $allowedExtensions)) {
+                    return ['success' => false, 'message' => 'Warranty format not allowed. Allowed: ' . strtoupper($allowedExtStr)];
                 }
                 
-                if ($upload['size'] > 10 * 1024 * 1024) {
-                    return ['success' => false, 'message' => 'File too large (Max 10MB).'];
+                if ($upload['size'] > $maxSizeMB * 1024 * 1024) {
+                    return ['success' => false, 'message' => "Warranty file too large (Max {$maxSizeMB}MB)."];
                 }
 
                 $targetDir = 'storage/uploads/warranty/';
@@ -226,21 +231,21 @@ class EquipmentController
                 $photoDir = 'storage/uploads/equipment/';
                 if (!is_dir($photoDir)) mkdir($photoDir, 0777, true);
 
+                $maxSizeMB = (int)$settingsRepo->get('equipment_max_upload_size', '5');
+                $allowedExtStr = $settingsRepo->get('equipment_allowed_extensions', 'jpg,png,jpeg');
+                $allowedExtensions = array_map('trim', explode(',', strtolower($allowedExtStr)));
+
                 $files = $_FILES['equipment_photos'];
                 $newlyUploadedCount = 0;
                 
                 for ($i = 0; $i < count($files['name']); $i++) {
                     if ($files['error'][$i] === UPLOAD_ERR_OK) {
-                        // Total count check: existing + newly added in this loop
-                        if (count($currentImages) >= 3) {
-                            break; // Stop if we reached 3
-                        }
+                        if (count($currentImages) >= 3) break;
 
                         $ext = strtolower(pathinfo($files['name'][$i], PATHINFO_EXTENSION));
-                        $allowed = ['jpg', 'jpeg', 'png'];
                         
-                        if (in_array($ext, $allowed)) {
-                            if ($files['size'][$i] <= 5 * 1024 * 1024) { // 5MB limit
+                        if (in_array($ext, $allowedExtensions)) {
+                            if ($files['size'][$i] <= $maxSizeMB * 1024 * 1024) {
                                 $fileName = 'equip_' . time() . '_' . uniqid() . '.' . $ext;
                                 if (move_uploaded_file($files['tmp_name'][$i], $photoDir . $fileName)) {
                                     $currentImages[] = $photoDir . $fileName;

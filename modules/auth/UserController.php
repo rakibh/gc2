@@ -28,8 +28,9 @@ class UserController
         $page = (int)($_GET['page'] ?? 1);
         $sortBy = $_GET['sort_by'] ?? 'created_at';
         $sortDir = $_GET['sort_dir'] ?? 'DESC';
+        $search = $_GET['search'] ?? null;
 
-        $result = $this->userRepository->getUsers($page, 20, $sortBy, $sortDir);
+        $result = $this->userRepository->getUsers($page, 20, $sortBy, $sortDir, $search);
 
         return [
             'title' => 'User Management',
@@ -40,7 +41,8 @@ class UserController
                 'pages' => $result['pages'],
                 'current_page' => $page,
                 'sort_by' => $sortBy,
-                'sort_dir' => $sortDir
+                'sort_dir' => $sortDir,
+                'search' => $search
             ]
         ];
     }

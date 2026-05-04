@@ -9,6 +9,7 @@ CREATE TABLE IF NOT EXISTS `user_preferences` (
     `timezone` VARCHAR(50) DEFAULT 'Asia/Dhaka',
     `time_format` ENUM('12', '24') DEFAULT '12',
     `desktop_notifications` BOOLEAN DEFAULT FALSE,
+    `notification_types` JSON DEFAULT NULL,
     `toast_position` ENUM('top-right', 'bottom-right') DEFAULT 'top-right',
     `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     CONSTRAINT `fk_user_prefs_user` FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON DELETE CASCADE

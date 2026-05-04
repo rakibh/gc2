@@ -7,8 +7,14 @@ $defaults = [
     'system_name' => 'IT Management System',
     'records_per_page' => '20',
     'notification_refresh' => '30',
-    'allowed_extensions' => 'pdf,jpg,png,jpeg,doc,docx,txt,xls,xlsx,csv',
-    'max_upload_size' => '5',
+    'user_allowed_extensions' => 'jpg,png,jpeg',
+    'user_max_upload_size' => '2',
+    'task_allowed_extensions' => 'pdf,jpg,png,jpeg,doc,docx,txt,xls,xlsx,csv',
+    'task_max_upload_size' => '5',
+    'equipment_allowed_extensions' => 'jpg,png,jpeg',
+    'equipment_max_upload_size' => '5',
+    'warranty_allowed_extensions' => 'pdf,jpg,png,jpeg',
+    'warranty_max_upload_size' => '10',
     'low_priority_color' => '#94a3b8',
     'medium_priority_color' => '#3b82f6',
     'high_priority_color' => '#f97316',
@@ -22,7 +28,7 @@ $current = array_merge($defaults, $settings);
     <div class="flex items-center justify-between">
         <div>
             <h1 class="text-2xl font-black text-slate-900 dark:text-white">System Settings</h1>
-            <p class="text-sm text-slate-500 dark:text-slate-400 mt-1">Configure global application behavior and preferences.</p>
+            <p class="text-sm text-slate-500 dark:text-slate-400 mt-1">Configure global application behavior and module-specific policies.</p>
         </div>
         <button @click="saveSettings" :disabled="loading" 
             class="bg-blue-600 hover:bg-blue-700 text-white px-8 py-3 rounded-2xl text-sm font-bold shadow-xl shadow-blue-500/20 transition-all flex items-center disabled:opacity-50">
@@ -57,32 +63,89 @@ $current = array_merge($defaults, $settings);
                     <label class="block text-xs font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-2">Session Timeout (Minutes)</label>
                     <input type="number" x-model="config.session_timeout" min="30"
                         class="w-full px-5 py-3.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl focus:ring-2 focus:ring-blue-500 outline-none text-sm font-bold dark:text-slate-100 transition-all">
-                    <p class="text-[10px] text-slate-400 mt-2 italic">Minimum 30 minutes. Users will be logged out after this period of inactivity.</p>
+                    <p class="text-[10px] text-slate-400 mt-2 italic">Minimum 30 minutes.</p>
+                </div>
+                <div>
+                    <label class="block text-xs font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-2">Notification Refresh (Seconds)</label>
+                    <input type="number" x-model="config.notification_refresh" min="5"
+                        class="w-full px-5 py-3.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl focus:ring-2 focus:ring-blue-500 outline-none text-sm font-bold dark:text-slate-100 transition-all">
                 </div>
             </div>
         </div>
 
-        <!-- File Upload & Task Settings -->
+        <!-- User Module Settings -->
         <div class="bg-white dark:bg-slate-900 rounded-3xl border border-slate-100 dark:border-slate-800 shadow-sm p-8 transition-colors">
             <h3 class="text-xs font-black text-slate-400 uppercase tracking-[0.2em] mb-8 flex items-center">
-                <i class="bi bi-files mr-2"></i> Tasks & File Handling
+                <i class="bi bi-person-gear mr-2"></i> User Module (Profiles)
             </h3>
-            <div class="space-y-8">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
                 <div>
-                    <label class="block text-xs font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-2">Allowed File Extensions (Comma Separated)</label>
-                    <input type="text" x-model="config.allowed_extensions" 
+                    <label class="block text-xs font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-2">Allowed Extensions</label>
+                    <input type="text" x-model="config.user_allowed_extensions" 
                         class="w-full px-5 py-3.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl focus:ring-2 focus:ring-blue-500 outline-none text-sm font-mono dark:text-slate-100 transition-all">
                 </div>
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
-                    <div>
-                        <label class="block text-xs font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-2">Max Upload Size (MB)</label>
-                        <input type="number" x-model="config.max_upload_size" 
-                            class="w-full px-5 py-3.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl focus:ring-2 focus:ring-blue-500 outline-none text-sm font-bold dark:text-slate-100 transition-all">
+                <div>
+                    <label class="block text-xs font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-2">Max Photo Size (MB)</label>
+                    <input type="number" x-model="config.user_max_upload_size" 
+                        class="w-full px-5 py-3.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl focus:ring-2 focus:ring-blue-500 outline-none text-sm font-bold dark:text-slate-100 transition-all">
+                </div>
+            </div>
+        </div>
+
+        <!-- Task Module Settings -->
+        <div class="bg-white dark:bg-slate-900 rounded-3xl border border-slate-100 dark:border-slate-800 shadow-sm p-8 transition-colors">
+            <h3 class="text-xs font-black text-slate-400 uppercase tracking-[0.2em] mb-8 flex items-center">
+                <i class="bi bi-list-task mr-2"></i> Task Module (Attachments)
+            </h3>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                <div>
+                    <label class="block text-xs font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-2">Allowed Extensions</label>
+                    <input type="text" x-model="config.task_allowed_extensions" 
+                        class="w-full px-5 py-3.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl focus:ring-2 focus:ring-blue-500 outline-none text-sm font-mono dark:text-slate-100 transition-all">
+                </div>
+                <div>
+                    <label class="block text-xs font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-2">Max Attachment Size (MB)</label>
+                    <input type="number" x-model="config.task_max_upload_size" 
+                        class="w-full px-5 py-3.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl focus:ring-2 focus:ring-blue-500 outline-none text-sm font-bold dark:text-slate-100 transition-all">
+                </div>
+            </div>
+        </div>
+
+        <!-- Equipment Module Settings -->
+        <div class="bg-white dark:bg-slate-900 rounded-3xl border border-slate-100 dark:border-slate-800 shadow-sm p-8 transition-colors">
+            <h3 class="text-xs font-black text-slate-400 uppercase tracking-[0.2em] mb-8 flex items-center">
+                <i class="bi bi-pc-display mr-2"></i> Equipment Module
+            </h3>
+            <div class="space-y-8">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-8 p-6 bg-slate-50 dark:bg-slate-800/50 rounded-2xl border border-slate-100 dark:border-slate-800">
+                    <div class="md:col-span-2">
+                        <p class="text-[10px] font-black uppercase text-slate-400 tracking-widest">Hardware Photos (Gallery)</p>
                     </div>
                     <div>
-                        <label class="block text-xs font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-2">Notification Refresh (Seconds)</label>
-                        <input type="number" x-model="config.notification_refresh" 
-                            class="w-full px-5 py-3.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl focus:ring-2 focus:ring-blue-500 outline-none text-sm font-bold dark:text-slate-100 transition-all">
+                        <label class="block text-xs font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-2">Allowed Extensions</label>
+                        <input type="text" x-model="config.equipment_allowed_extensions" 
+                            class="w-full px-5 py-3.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl focus:ring-2 focus:ring-blue-500 outline-none text-sm font-mono dark:text-slate-100 transition-all">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-2">Max Photo Size (MB)</label>
+                        <input type="number" x-model="config.equipment_max_upload_size" 
+                            class="w-full px-5 py-3.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl focus:ring-2 focus:ring-blue-500 outline-none text-sm font-bold dark:text-slate-100 transition-all">
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-8 p-6 bg-slate-50 dark:bg-slate-800/50 rounded-2xl border border-slate-100 dark:border-slate-800">
+                    <div class="md:col-span-2">
+                        <p class="text-[10px] font-black uppercase text-slate-400 tracking-widest">Warranty Documents</p>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-2">Allowed Extensions</label>
+                        <input type="text" x-model="config.warranty_allowed_extensions" 
+                            class="w-full px-5 py-3.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl focus:ring-2 focus:ring-blue-500 outline-none text-sm font-mono dark:text-slate-100 transition-all">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-2">Max File Size (MB)</label>
+                        <input type="number" x-model="config.warranty_max_upload_size" 
+                            class="w-full px-5 py-3.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl focus:ring-2 focus:ring-blue-500 outline-none text-sm font-bold dark:text-slate-100 transition-all">
                     </div>
                 </div>
             </div>
@@ -121,36 +184,6 @@ $current = array_merge($defaults, $settings);
                         <input type="color" x-model="config.urgent_priority_color" class="h-10 w-10 border-none bg-transparent cursor-pointer">
                         <input type="text" x-model="config.urgent_priority_color" class="flex-1 px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-[10px] font-mono dark:text-white uppercase">
                     </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Notification Preferences -->
-        <div class="bg-white dark:bg-slate-900 rounded-3xl border border-slate-100 dark:border-slate-800 shadow-sm p-8 transition-colors">
-            <h3 class="text-xs font-black text-slate-400 uppercase tracking-[0.2em] mb-8 flex items-center">
-                <i class="bi bi-bell mr-2"></i> Desktop Notifications
-            </h3>
-            <div class="flex items-center justify-between p-6 bg-slate-50 dark:bg-slate-800/50 rounded-2xl border border-slate-100 dark:border-slate-800">
-                <div class="flex items-center gap-4">
-                    <div class="p-3 rounded-xl bg-blue-100 dark:bg-blue-900/30 text-blue-600">
-                        <i class="bi bi-window-stack text-xl"></i>
-                    </div>
-                    <div>
-                        <p class="text-sm font-bold text-slate-800 dark:text-white">OS Native Notifications</p>
-                        <p class="text-xs text-slate-500 dark:text-slate-400">Receive alerts directly on your desktop even when the browser is minimized.</p>
-                    </div>
-                </div>
-                <div class="flex items-center gap-3">
-                    <template x-if="$store.app.notifications.enabled">
-                        <span class="flex items-center text-[10px] font-black uppercase text-green-500 gap-1.5">
-                            <span class="h-1.5 w-1.5 rounded-full bg-green-500 animate-pulse"></span> Active
-                        </span>
-                    </template>
-                    <button @click="$store.app.requestNotificationPermission()" 
-                        class="px-5 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all"
-                        :class="$store.app.notifications.enabled ? 'bg-white dark:bg-slate-900 text-slate-400 cursor-default' : 'bg-blue-600 text-white hover:bg-blue-700 shadow-lg shadow-blue-500/20'">
-                        <span x-text="$store.app.notifications.enabled ? 'Enabled' : 'Enable Now'"></span>
-                    </button>
                 </div>
             </div>
         </div>

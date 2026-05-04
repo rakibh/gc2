@@ -15,7 +15,7 @@ $toastPosition = Session::get('user_toast_position', 'bottom-right');
 $desktopNotifications = Session::get('user_desktop_notifications', false);
 ?>
 <!DOCTYPE html>
-<html lang="en" class="h-full <?php echo $userTheme === 'dark' ? 'dark' : ''; ?>">
+<html lang="en" class="<?php echo $userTheme === 'dark' ? 'dark' : ''; ?>">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -39,10 +39,19 @@ $desktopNotifications = Session::get('user_desktop_notifications', false);
                     unread_count: 0,
                     recent: [],
                     enabled: <?php echo $desktopNotifications ? 'true' : 'false'; ?>,
+                    types: <?php echo Session::get('user_notification_types', '[]') === 'all' ? '["all"]' : (Session::get('user_notification_types') ?: '[]'); ?>,
                     last_id: parseInt(localStorage.getItem('last_notif_id')) || 0
                 },
                 toastConfig: {
                     position: '<?php echo $toastPosition; ?>'
+                },
+                timezone: '<?php echo Session::get('user_timezone', 'UTC'); ?>',
+                timeFormat: '<?php echo Session::get('user_time_format', '12'); ?>',
+                isTypeAllowed(type) {
+                    if (!this.notifications.enabled) return false;
+                    const allowed = this.notifications.types || [];
+                    if (allowed.includes('all')) return true;
+                    return allowed.includes(type.toLowerCase());
                 },
                 addToast(title, message, type = 'success') {
                     const id = Date.now();
@@ -105,7 +114,7 @@ $desktopNotifications = Session::get('user_desktop_notifications', false);
                                 // Trigger Native Notifications for NEW items
                                 if (this.notifications.enabled && Notification.permission === 'granted') {
                                     data.recent.forEach(n => {
-                                        if (parseInt(n.id) > this.notifications.last_id) {
+                                        if (parseInt(n.id) > this.notifications.last_id && this.isTypeAllowed(n.type)) {
                                             this.showNativeNotification(
                                                 n.type.charAt(0).toUpperCase() + n.type.slice(1) + ' Alert',
                                                 n.message,
@@ -221,7 +230,7 @@ $desktopNotifications = Session::get('user_desktop_notifications', false);
     </style>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 </head>
-<body class="h-full font-inter overflow-hidden bg-slate-50 dark:bg-slate-950 transition-colors duration-300" 
+<body class="font-inter bg-slate-50 dark:bg-slate-950 transition-colors duration-300 min-h-screen flex flex-col" 
     x-data="{ 
         mobileSidebarOpen: false, 
         darkMode: document.documentElement.classList.contains('dark'),
@@ -265,13 +274,7 @@ $desktopNotifications = Session::get('user_desktop_notifications', false);
         </template>
     </div>
 
-    <!-- Mobile Sidebar Backdrop -->
-    <div x-show="mobileSidebarOpen" class="fixed inset-0 z-50 bg-slate-900/80 lg:hidden" 
-        x-transition:enter="transition-opacity ease-linear duration-300" x-transition:enter-start="opacity-0" x-transition:enter-end="opacity-100" 
-        x-transition:leave="transition-opacity ease-linear duration-300" x-transition:leave-start="opacity-100" x-transition:leave-end="opacity-0"
-        @click="mobileSidebarOpen = false"></div>
-
-    <div class="flex h-full">
+    <div class="flex-1 flex">
         <!-- Static Sidebar for Desktop -->
         <div class="hidden lg:flex lg:w-72 lg:flex-col lg:fixed lg:inset-y-0 z-50">
             <?php include __DIR__ . '/sidebar.php'; ?>
@@ -285,70 +288,19 @@ $desktopNotifications = Session::get('user_desktop_notifications', false);
         </div>
 
         <!-- Main Area -->
-        <div class="flex flex-col flex-1 lg:pl-72 min-h-screen">
+        <div class="flex flex-col flex-1 lg:pl-72 w-full min-h-screen">
             <!-- Header / Top Bar -->
             <?php include __DIR__ . '/header.php'; ?>
 
             <!-- Page Content -->
-            <main class="flex-1 overflow-y-auto bg-slate-50 dark:bg-slate-950 p-6 lg:p-8 transition-colors duration-300">
-                <div class="max-w-7xl mx-auto">
-                    <!-- Breadcrumbs / Page Header -->
-                    <div class="mb-8 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                        <div>
-                            <h1 class="text-2xl font-bold text-slate-900 dark:text-slate-100 leading-tight"><?php echo $title; ?></h1>
-                            <nav class="flex text-sm text-slate-500 dark:text-slate-400 mt-2">
-                                <a href="index.php" class="hover:text-blue-600 dark:hover:text-blue-400 flex items-center">
-                                    <i class="bi bi-house-door mr-1.5"></i> Home
-                                </a>
-                                <span class="mx-2 text-slate-300 dark:text-slate-700">/</span>
-                                <span class="text-slate-900 dark:text-slate-300 font-medium"><?php echo $title; ?></span>
-                            </nav>
-                        </div>
-                        
-                        <div id="page-actions" class="flex items-center space-x-3">
-                            <?php if (isset($data['actions'])) echo $data['actions']; ?>
-                        </div>
-                    </div>
-
+            <main class="flex-1 bg-slate-50 dark:bg-slate-950 p-6 lg:p-8 transition-colors duration-300">
+                <div class="<?php echo ($route === 'list_equipment' || $route === 'view_equipment' || $route === 'edit_equipment' || $route === 'add_equipment') ? 'max-w-8xl' : 'max-w-7xl'; ?> mx-auto">
                     <!-- Content -->
-                    <div class="animate-in fade-in duration-500">
+                    <div class="w-full">
                         <?php include $view; ?>
                     </div>
                 </div>
             </main>
-        </div>
-    </div>
-
-    <!-- Global Confirmation Modal -->
-    <div x-show="$store.app.confirmModal.show" x-cloak class="fixed inset-0 z-[110] overflow-y-auto">
-        <div class="flex items-center justify-center min-h-screen p-4 text-center">
-            <div x-show="$store.app.confirmModal.show" 
-                 x-transition:enter="ease-out duration-300" x-transition:enter-start="opacity-0" x-transition:enter-end="opacity-100"
-                 x-transition:leave="ease-in duration-200" x-transition:leave-start="opacity-100" x-transition:leave-end="opacity-0"
-                 class="fixed inset-0 bg-slate-900/80 transition-opacity" @click="$store.app.confirmModal.show = false"></div>
-
-            <div x-show="$store.app.confirmModal.show"
-                 x-transition:enter="ease-out duration-300" x-transition:enter-start="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95" x-transition:enter-end="opacity-100 translate-y-0 sm:scale-100"
-                 x-transition:leave="ease-in duration-200" x-transition:leave-start="opacity-100 translate-y-0 sm:scale-100" x-transition:leave-end="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
-                 class="relative inline-block align-bottom bg-white dark:bg-slate-900 rounded-3xl text-left overflow-hidden shadow-2xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full border border-slate-100 dark:border-slate-800">
-                <div class="p-8">
-                    <div class="flex items-center justify-center w-12 h-12 rounded-2xl bg-blue-50 dark:bg-blue-900/20 text-blue-600 mb-6">
-                        <i class="bi bi-question-circle text-2xl"></i>
-                    </div>
-                    <h3 class="text-xl font-bold text-slate-900 dark:text-white mb-2" x-text="$store.app.confirmModal.title"></h3>
-                    <p class="text-sm text-slate-500 dark:text-slate-400" x-text="$store.app.confirmModal.message"></p>
-                </div>
-                <div class="bg-slate-50 dark:bg-slate-800/50 px-8 py-6 flex flex-row-reverse gap-3">
-                    <button type="button" @click="$store.app.confirmModal.show = false; if($store.app.confirmModal.onConfirm) $store.app.confirmModal.onConfirm()" 
-                            class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2.5 rounded-xl text-sm font-bold shadow-lg shadow-blue-500/20 transition-all">
-                        Confirm
-                    </button>
-                    <button type="button" @click="$store.app.confirmModal.show = false"
-                            class="text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 px-6 py-2.5 text-sm font-bold transition-all">
-                        Cancel
-                    </button>
-                </div>
-            </div>
         </div>
     </div>
 </body>

@@ -15,16 +15,20 @@ class UploadController
             return ['success' => false, 'message' => 'No file uploaded or upload error.'];
         }
 
-        // 1. Validation (5MB, JPEG/JPG/PNG)
-        $maxSize = 5 * 1024 * 1024;
-        $allowedTypes = ['image/jpeg', 'image/jpg', 'image/png'];
-        
-        if ($file['size'] > $maxSize) {
-            return ['success' => false, 'message' => 'File size exceeds 5MB limit.'];
+        $settingsRepo = new \Modules\Admin\SettingsRepository();
+        $maxSizeMB = (int)$settingsRepo->get('user_max_upload_size', '2');
+        $allowedExtStr = $settingsRepo->get('user_allowed_extensions', 'jpg,png,jpeg');
+        $allowedExtensions = array_map('trim', explode(',', strtolower($allowedExtStr)));
+
+        $maxSizeBytes = $maxSizeMB * 1024 * 1024;
+        $extension = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
+
+        if ($file['size'] > $maxSizeBytes) {
+            return ['success' => false, 'message' => "File size exceeds {$maxSizeMB}MB limit."];
         }
 
-        if (!in_array($file['type'], $allowedTypes)) {
-            return ['success' => false, 'message' => 'Only JPEG, JPG, and PNG formats are allowed.'];
+        if (!in_array($extension, $allowedExtensions)) {
+            return ['success' => false, 'message' => 'Format not allowed. Allowed: ' . strtoupper($allowedExtStr)];
         }
 
         // 2. Prepare Directory

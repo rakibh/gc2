@@ -76,22 +76,46 @@ class DashboardRepository extends Repository
     public function getChartData(): array
     {
         $data = [
-            'equipment_status' => [],
-            'tasks_status' => []
+            'equipment_status' => [
+                'Available' => 0,
+                'In Use' => 0,
+                'Under Repair' => 0,
+                'Retired' => 0,
+                'Lost/Stolen' => 0
+            ],
+            'tasks_status' => [
+                'todo' => 0,
+                'doing' => 0,
+                'past_due' => 0,
+                'done' => 0,
+                'dropped' => 0
+            ]
         ];
 
         try {
-            $data['equipment_status'] = $this->db->query("
+            $equipmentResults = $this->db->query("
                 SELECT status, COUNT(*) as count 
                 FROM equipments 
                 GROUP BY status
-            ")->fetchAll(PDO::FETCH_KEY_PAIR) ?: [];
+            ")->fetchAll(PDO::FETCH_KEY_PAIR);
+            
+            if ($equipmentResults) {
+                foreach ($equipmentResults as $status => $count) {
+                    $data['equipment_status'][$status] = (int)$count;
+                }
+            }
 
-            $data['tasks_status'] = $this->db->query("
+            $taskResults = $this->db->query("
                 SELECT status, COUNT(*) as count 
                 FROM tasks 
                 GROUP BY status
-            ")->fetchAll(PDO::FETCH_KEY_PAIR) ?: [];
+            ")->fetchAll(PDO::FETCH_KEY_PAIR);
+
+            if ($taskResults) {
+                foreach ($taskResults as $status => $count) {
+                    $data['tasks_status'][$status] = (int)$count;
+                }
+            }
         } catch (Exception $e) {
             error_log("Dashboard Chart Error: " . $e->getMessage());
         }
@@ -138,7 +162,7 @@ class DashboardRepository extends Repository
     }
 
     /**
-     * Get recent system logs (for admin) or notifications (for user).
+     * Get recent activity (for admin) or notifications (for user).
      */
     public function getRecentActivity(int $userId, string $role, int $limit = 5): array
     {

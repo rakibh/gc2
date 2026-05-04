@@ -28,7 +28,20 @@ CREATE TABLE IF NOT EXISTS `users` (
     INDEX idx_user_status (`status`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- 2. Audit Logs Table
+-- 2. User Preferences
+CREATE TABLE IF NOT EXISTS `user_preferences` (
+    `user_id` INT PRIMARY KEY,
+    `theme` ENUM('light', 'dark') DEFAULT 'light',
+    `timezone` VARCHAR(50) DEFAULT 'Asia/Dhaka',
+    `time_format` ENUM('12', '24') DEFAULT '12',
+    `desktop_notifications` BOOLEAN DEFAULT FALSE,
+    `notification_types` JSON DEFAULT NULL,
+    `toast_position` ENUM('top-right', 'bottom-right') DEFAULT 'top-right',
+    `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    CONSTRAINT `fk_user_prefs_user` FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 3. Audit Logs Table
 CREATE TABLE IF NOT EXISTS `audit_logs` (
     `id` INT AUTO_INCREMENT PRIMARY KEY,
     `user_id` INT,
@@ -226,5 +239,7 @@ CREATE TABLE IF NOT EXISTS `system_logs` (
 -- Initial Data
 INSERT INTO `users` (`username`, `employee_id`, `password`, `first_name`, `last_name`, `role`) VALUES 
 ('admin', 'EMP001', '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 'System', 'Administrator', 'admin'); -- password: password
+
+INSERT INTO `user_preferences` (`user_id`, `notification_types`) VALUES (1, '["all"]');
 
 SET FOREIGN_KEY_CHECKS = 1;

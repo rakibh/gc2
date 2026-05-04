@@ -166,7 +166,7 @@ class EquipmentRepository extends Repository
         }
 
         if (!empty($filters['search'])) {
-            $query .= " AND (e.serial_number LIKE :search OR e.brand LIKE :search OR e.model LIKE :search OR e.location LIKE :search)";
+            $query .= " AND (e.serial_number LIKE :search OR e.brand LIKE :search OR e.model LIKE :search OR e.location LIKE :search OR e.floor LIKE :search OR e.department LIKE :search OR e.condition LIKE :search)";
             $params['search'] = '%' . $filters['search'] . '%';
         }
 
@@ -189,7 +189,7 @@ class EquipmentRepository extends Repository
             $countQuery .= " AND e.status = :status";
         }
         if (!empty($filters['search'])) {
-            $countQuery .= " AND (e.serial_number LIKE :search OR e.brand LIKE :search OR e.model LIKE :search OR e.location LIKE :search)";
+            $countQuery .= " AND (e.serial_number LIKE :search OR e.brand LIKE :search OR e.model LIKE :search OR e.location LIKE :search OR e.floor LIKE :search OR e.department LIKE :search OR e.condition LIKE :search)";
         }
 
         $countStmt = $this->db->prepare($countQuery);
@@ -262,7 +262,7 @@ class EquipmentRepository extends Repository
                 'floor' => $data['floor'] ?? null,
                 'department' => $data['department'] ?? null,
                 'assigned_to' => $data['assigned_to'] ?? null,
-                'condition' => $data['condition'] ?? 'excellent',
+                'condition' => !empty($data['condition']) ? $data['condition'] : 'excellent',
                 'warranty_seller' => $data['warranty_seller'] ?? null,
                 'warranty_purchase_date' => !empty($data['warranty_purchase_date']) ? $data['warranty_purchase_date'] : null,
                 'warranty_expiry' => !empty($data['warranty_expiry']) ? $data['warranty_expiry'] : null,

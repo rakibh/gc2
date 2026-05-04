@@ -186,14 +186,29 @@ $images = $e['images'] ? (is_string($e['images']) ? json_decode($e['images'], tr
                         ?>
                         <div class="flex items-center gap-3">
                             <div class="w-3 h-3 rounded-full <?php echo $color; ?> animate-pulse"></div>
-                            <span class="text-lg font-black text-slate-800 dark:text-white"><?php echo $e['status']; ?></span>
+                            <span class="text-sm font-black text-slate-800 dark:text-white"><?php echo $e['status']; ?></span>
                         </div>
                     </div>
                     <div>
                         <p class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-3">Physical Condition</p>
-                        <span class="px-3 py-1 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 text-[10px] font-black rounded-full uppercase border border-slate-200 dark:border-slate-700">
-                            <?php echo $e['condition']; ?>
-                        </span>
+                        <?php 
+                        $conditionColors = [
+                            'excellent' => 'bg-green-500',
+                            'good' => 'bg-blue-500',
+                            'fair' => 'bg-yellow-500',
+                            'poor' => 'bg-orange-500',
+                            'broken' => 'bg-red-500'
+                        ];
+                        // Use !empty to handle empty strings correctly
+                        $dbCond = !empty($e['condition']) ? strtolower((string)$e['condition']) : 'excellent';
+                        $condColor = $conditionColors[$dbCond] ?? 'bg-slate-500';
+                        ?>
+                        <div class="flex items-center gap-3">
+                            <div class="w-3 h-3 rounded-full <?php echo $condColor; ?>"></div>
+                            <span class="text-sm font-black text-slate-800 dark:text-white uppercase">
+                                <?php echo htmlspecialchars($dbCond); ?>
+                            </span>
+                        </div>
                     </div>
                 </div>
             </div>

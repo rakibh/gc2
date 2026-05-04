@@ -36,13 +36,14 @@ class PreferencesRepository extends Repository
     public function save(int $userId, array $data): bool
     {
         $stmt = $this->db->prepare("
-            INSERT INTO user_preferences (user_id, theme, timezone, time_format, desktop_notifications, toast_position)
-            VALUES (:user_id, :theme, :timezone, :time_format, :desktop_notifications, :toast_position) AS new_vals
+            INSERT INTO user_preferences (user_id, theme, timezone, time_format, desktop_notifications, notification_types, toast_position)
+            VALUES (:user_id, :theme, :timezone, :time_format, :desktop_notifications, :notification_types, :toast_position) AS new_vals
             ON DUPLICATE KEY UPDATE 
                 theme = new_vals.theme,
                 timezone = new_vals.timezone,
                 time_format = new_vals.time_format,
                 desktop_notifications = new_vals.desktop_notifications,
+                notification_types = new_vals.notification_types,
                 toast_position = new_vals.toast_position
         ");
 
@@ -52,6 +53,7 @@ class PreferencesRepository extends Repository
             'timezone' => $data['timezone'] ?? 'Asia/Dhaka',
             'time_format' => $data['time_format'] ?? '12',
             'desktop_notifications' => isset($data['desktop_notifications']) ? (int)$data['desktop_notifications'] : 0,
+            'notification_types' => isset($data['notification_types']) ? json_encode($data['notification_types']) : null,
             'toast_position' => $data['toast_position'] ?? 'top-right'
         ]);
     }
@@ -67,6 +69,7 @@ class PreferencesRepository extends Repository
             'timezone' => 'Asia/Dhaka',
             'time_format' => '12',
             'desktop_notifications' => 0,
+            'notification_types' => null,
             'toast_position' => 'top-right'
         ];
     }

@@ -30,12 +30,138 @@ $statusColors = [
     'Past Due' => '#f59e0b',
     'Dropped' => '#ef4444'
 ];
+
+// Ensure chartData elements are objects in JS
+$jsonChartData = json_encode([
+    'equipment_status' => (object)($chartData['equipment_status'] ?? []),
+    'tasks_status' => (object)($chartData['tasks_status'] ?? [])
+]);
 ?>
 
 <!-- Chart.js -->
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
-<div class="space-y-8" x-data="dashboard(<?php echo htmlspecialchars(json_encode($chartData)); ?>)">
+<script>
+function dashboard(chartData) {
+    return {
+        init() {
+            console.log('Dashboard Initializing with data:', chartData);
+            // Small delay to ensure canvas is ready and dimensions are calculated
+            setTimeout(() => {
+                this.initEquipmentChart();
+                this.initTaskChart();
+            }, 100);
+        },
+        initEquipmentChart() {
+            if (typeof Chart === 'undefined') {
+                console.error('Chart.js not loaded');
+                return;
+            }
+            const canvas = document.getElementById('equipmentChart');
+            if (!canvas) return;
+            const ctx = canvas.getContext('2d');
+            
+            let data = chartData.equipment_status || {};
+            
+            // Fallback to dummy if empty
+            if (Object.keys(data).length === 0) {
+                data = { 'No Data': 1 };
+            }
+            
+            const statusColors = <?php echo json_encode($statusColors); ?>;
+            
+            new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: Object.keys(data),
+                    datasets: [{
+                        data: Object.values(data),
+                        backgroundColor: Object.keys(data).map(k => statusColors[k] || '#e2e8f0'),
+                        borderWidth: 0,
+                        hoverOffset: 10
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    cutout: '70%',
+                    plugins: {
+                        legend: {
+                            position: 'bottom',
+                            labels: {
+                                padding: 20,
+                                usePointStyle: true,
+                                font: { size: 11, family: 'Inter', weight: 'bold' },
+                                color: document.documentElement.classList.contains('dark') ? '#94a3b8' : '#64748b'
+                            }
+                        }
+                    }
+                }
+            });
+        },
+        initTaskChart() {
+            if (typeof Chart === 'undefined') return;
+            const canvas = document.getElementById('taskChart');
+            if (!canvas) return;
+            const ctx = canvas.getContext('2d');
+            
+            const taskData = chartData.tasks_status || {};
+            
+            // Expected statuses to ensure consistent order/labels
+            const statuses = ['todo', 'doing', 'past_due', 'done', 'dropped'];
+            const labels = ['To Do', 'Doing', 'Past Due', 'Done', 'Dropped'];
+            
+            const dataValues = statuses.map(s => taskData[s] || 0);
+            const statusColors = <?php echo json_encode($statusColors); ?>;
+            const colors = statuses.map(s => statusColors[s] || '#94a3b8');
+            
+            // If all values are 0, add a small hint or just render empty
+            const totalTasks = dataValues.reduce((a, b) => a + b, 0);
+            
+            new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Tasks',
+                        data: dataValues,
+                        backgroundColor: colors,
+                        borderRadius: 8,
+                        barThickness: 30
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: { 
+                            beginAtZero: true, 
+                            ticks: { 
+                                stepSize: 1, 
+                                color: '#94a3b8',
+                                display: totalTasks > 0
+                            },
+                            grid: { color: 'rgba(148, 163, 184, 0.1)' }
+                        },
+                        x: { 
+                            ticks: { color: '#94a3b8', font: { size: 10, weight: 'bold' } },
+                            grid: { display: false }
+                        }
+                    },
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            enabled: totalTasks > 0
+                        }
+                    }
+                }
+            });
+        }
+    }
+}
+</script>
+
+<div class="space-y-8" x-data="dashboard(<?php echo htmlspecialchars($jsonChartData); ?>)">
     <!-- Summary Stats -->
     <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <div class="bg-white dark:bg-slate-900 p-6 rounded-3xl border border-slate-100 dark:border-slate-800 shadow-sm flex items-center gap-4 transition-all hover:shadow-md">
@@ -181,99 +307,3 @@ $statusColors = [
         </div>
     </div>
 </div>
-
-<script>
-function dashboard(chartData) {
-    return {
-        init() {
-            console.log('Dashboard Initializing with data:', chartData);
-            this.initEquipmentChart();
-            this.initTaskChart();
-        },
-        initEquipmentChart() {
-            const canvas = document.getElementById('equipmentChart');
-            if (!canvas) return;
-            const ctx = canvas.getContext('2d');
-            
-            let data = chartData.equipment_status;
-            // Fallback to dummy if empty
-            if (Object.keys(data).length === 0) {
-                data = { 'No Data': 1 };
-            }
-            
-            new Chart(ctx, {
-                type: 'doughnut',
-                data: {
-                    labels: Object.keys(data),
-                    datasets: [{
-                        data: Object.values(data),
-                        backgroundColor: Object.keys(data).map(k => <?php echo json_encode($statusColors); ?>[k] || '#e2e8f0'),
-                        borderWidth: 0,
-                        hoverOffset: 10
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    cutout: '70%',
-                    plugins: {
-                        legend: {
-                            position: 'bottom',
-                            labels: {
-                                padding: 20,
-                                usePointStyle: true,
-                                font: { size: 11, family: 'Inter', weight: 'bold' },
-                                color: document.documentElement.classList.contains('dark') ? '#94a3b8' : '#64748b'
-                            }
-                        }
-                    }
-                }
-            });
-        },
-        initTaskChart() {
-            const canvas = document.getElementById('taskChart');
-            if (!canvas) return;
-            const ctx = canvas.getContext('2d');
-            
-            // Expected statuses to ensure consistent order/labels
-            const statuses = ['todo', 'doing', 'past_due', 'done', 'dropped'];
-            const labels = ['To Do', 'Doing', 'Past Due', 'Done', 'Dropped'];
-            
-            const dataValues = statuses.map(s => chartData.tasks_status[s] || 0);
-            const colors = statuses.map(s => <?php echo json_encode($statusColors); ?>[s] || '#94a3b8');
-            
-            new Chart(ctx, {
-                type: 'bar',
-                data: {
-                    labels: labels,
-                    datasets: [{
-                        label: 'Tasks',
-                        data: dataValues,
-                        backgroundColor: colors,
-                        borderRadius: 8,
-                        barThickness: 30
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    scales: {
-                        y: { 
-                            beginAtZero: true, 
-                            ticks: { stepSize: 1, color: '#94a3b8' },
-                            grid: { color: 'rgba(148, 163, 184, 0.1)' }
-                        },
-                        x: { 
-                            ticks: { color: '#94a3b8', font: { size: 10, weight: 'bold' } },
-                            grid: { display: false }
-                        }
-                    },
-                    plugins: {
-                        legend: { display: false }
-                    }
-                }
-            });
-        }
-    }
-}
-</script>

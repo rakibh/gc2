@@ -376,33 +376,42 @@ $jsData = [
                 </div>
                 
                 <div x-show="formData.include_images" x-transition class="p-8 bg-slate-50 dark:bg-slate-800/50 rounded-3xl border border-slate-100 dark:border-slate-800 space-y-6">
-                    <!-- Current Images -->
-                    <template x-if="images.length > 0">
-                        <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
-                            <template x-for="(img, idx) in images" :key="idx">
-                                <div class="relative group aspect-square rounded-2xl overflow-hidden border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900">
-                                    <img :src="img" class="w-full h-full object-cover">
-                                    <button type="button" @click="removeImage(idx)" 
-                                            class="absolute top-2 right-2 w-7 h-7 bg-red-500 text-white rounded-lg flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow-lg">
-                                        <i class="bi bi-trash-fill text-xs"></i>
-                                    </button>
-                                </div>
-                            </template>
-                        </div>
-                    </template>
+                    <!-- Gallery Grid -->
+                    <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
+                        <!-- Existing Images -->
+                        <template x-for="(img, idx) in images" :key="'old_'+idx">
+                            <div class="relative group aspect-square rounded-2xl overflow-hidden border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-sm">
+                                <img :src="img" class="w-full h-full object-cover">
+                                <button type="button" @click="removeImage(idx)" 
+                                        class="absolute top-2 right-2 w-7 h-7 bg-red-500 text-white rounded-lg flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow-lg">
+                                    <i class="bi bi-trash-fill text-xs"></i>
+                                </button>
+                            </div>
+                        </template>
+
+                        <!-- New Photos Previews -->
+                        <template x-for="(photo, idx) in newPhotos" :key="'new_'+idx">
+                            <div class="relative group aspect-square rounded-2xl overflow-hidden border-2 border-indigo-400 bg-white dark:bg-slate-900 shadow-md">
+                                <img :src="photo.preview" class="w-full h-full object-cover">
+                                <div class="absolute top-2 left-2 bg-indigo-600 text-[8px] font-black text-white uppercase px-1.5 py-0.5 rounded shadow-sm">New</div>
+                                <button type="button" @click="removeNewPhoto(idx)" 
+                                        class="absolute top-2 right-2 w-7 h-7 bg-red-500 text-white rounded-lg flex items-center justify-center shadow-lg">
+                                    <i class="bi bi-trash-fill text-xs"></i>
+                                </button>
+                            </div>
+                        </template>
+                    </div>
 
                     <!-- Upload Input -->
-                    <div class="relative group">
-                        <input type="file" name="equipment_photos[]" multiple accept="image/*" 
-                               :disabled="images.length >= 3"
-                               class="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10 disabled:cursor-not-allowed">
-                        <div class="border-2 border-dashed border-slate-200 dark:border-slate-700 rounded-2xl p-8 text-center group-hover:border-indigo-400 transition-colors bg-white/50 dark:bg-slate-900/50"
-                             :class="images.length >= 3 ? 'opacity-50 cursor-not-allowed' : ''">
+                    <div class="relative group" x-show="images.length + newPhotos.length < 3">
+                        <input type="file" @change="handlePhotosChange" multiple accept="image/*" 
+                               class="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10">
+                        <div class="border-2 border-dashed border-slate-200 dark:border-slate-700 rounded-2xl p-8 text-center group-hover:border-indigo-400 transition-all bg-white/50 dark:bg-slate-900/50">
                             <div class="w-12 h-12 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-500 rounded-xl flex items-center justify-center mx-auto mb-3">
                                 <i class="bi bi-images text-xl"></i>
                             </div>
-                            <p class="text-xs font-black text-slate-600 dark:text-slate-300 uppercase tracking-widest" x-text="images.length >= 3 ? 'Max Photos Reached' : 'Add Equipment Photos'"></p>
-                            <p class="text-[10px] text-slate-400 mt-2">Max 3 photos (JPG, PNG) &middot; Max 5MB each</p>
+                            <p class="text-xs font-black text-slate-600 dark:text-slate-300 uppercase tracking-widest">Add Equipment Photos</p>
+                            <p class="text-[10px] text-slate-400 mt-2">Max 3 photos total &middot; Max 5MB each</p>
                         </div>
                     </div>
                 </div>
@@ -433,10 +442,42 @@ function equipmentForm(initialData, types, allBlocks) {
         loading: false,
         warrantyFile: null,
         images: initialData.images || [],
+        newPhotos: [], // { file, preview }
         imagesToDelete: [],
         removeImage(idx) {
             this.imagesToDelete.push(this.images[idx]);
             this.images.splice(idx, 1);
+        },
+        handlePhotosChange(e) {
+            const files = Array.from(e.target.files);
+            const remainingSlots = 3 - (this.images.length + this.newPhotos.length);
+
+            if (files.length > remainingSlots) {
+                Alpine.store('app').addToast('Limit Reached', `You can only add ${remainingSlots} more photo(s).`, 'warning');
+            }
+
+            files.slice(0, remainingSlots).forEach(file => {
+                if (file.size > 5 * 1024 * 1024) {
+                    Alpine.store('app').addToast('Error', `${file.name} exceeds 5MB.`, 'error');
+                    return;
+                }
+                if (!['image/jpeg', 'image/png', 'image/jpg'].includes(file.type)) {
+                    Alpine.store('app').addToast('Error', `${file.name} is not a valid image.`, 'error');
+                    return;
+                }
+
+                this.newPhotos.push({
+                    file: file,
+                    preview: URL.createObjectURL(file)
+                });
+            });
+
+            // Clear input so same files can be re-selected if removed
+            e.target.value = '';
+        },
+        removeNewPhoto(idx) {
+            URL.revokeObjectURL(this.newPhotos[idx].preview);
+            this.newPhotos.splice(idx, 1);
         },
         get selectedType() {
             return this.types.find(t => t.id == this.formData.type_id);
@@ -553,11 +594,10 @@ function equipmentForm(initialData, types, allBlocks) {
             form.append('custom_data', JSON.stringify(this.formData.custom_data));
             form.append('images_to_delete', JSON.stringify(this.imagesToDelete));
             
-            // Append files from native FormData (handles multi-select photos)
-            const photoFiles = nativeForm.querySelector('input[name="equipment_photos[]"]').files;
-            for (let i = 0; i < photoFiles.length; i++) {
-                form.append('equipment_photos[]', photoFiles[i]);
-            }
+            // Append newly selected files from Alpine state
+            this.newPhotos.forEach(photo => {
+                form.append('equipment_photos[]', photo.file);
+            });
             
             if (this.warrantyFile) {
                 form.append('warranty_document', this.warrantyFile);

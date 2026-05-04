@@ -12,22 +12,33 @@ use Exception;
 class UserRepository extends Repository
 {
     /**
-     * Get users with pagination and sorting.
+     * Get users with pagination, sorting, and search.
      */
-    public function getUsers(int $page = 1, int $limit = 20, string $sortBy = 'created_at', string $sortDir = 'DESC'): array
+    public function getUsers(int $page = 1, int $limit = 20, string $sortBy = 'created_at', string $sortDir = 'DESC', ?string $search = null): array
     {
         $offset = ($page - 1) * $limit;
         $allowedSort = ['role', 'status', 'created_at', 'username', 'employee_id'];
         if (!in_array($sortBy, $allowedSort)) $sortBy = 'created_at';
         $sortDir = strtoupper($sortDir) === 'ASC' ? 'ASC' : 'DESC';
 
+        $where = "";
+        $params = [];
+        if ($search) {
+            $where = " WHERE (username LIKE :search OR first_name LIKE :search OR last_name LIKE :search OR email LIKE :search OR employee_id LIKE :search)";
+            $params['search'] = '%' . $search . '%';
+        }
+
         $stmt = $this->db->prepare("
             SELECT id, username, employee_id, first_name, last_name, email, phone, designation, profile_photo, role, status, created_at 
             FROM users 
+            $where
             ORDER BY $sortBy $sortDir 
             LIMIT :limit OFFSET :offset
         ");
         
+        foreach ($params as $key => $val) {
+            $stmt->bindValue($key, $val);
+        }
         $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
         $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
         $stmt->execute();
@@ -35,7 +46,9 @@ class UserRepository extends Repository
         $users = $stmt->fetchAll();
 
         // Get total count for pagination
-        $total = (int)$this->db->query("SELECT COUNT(*) FROM users")->fetchColumn();
+        $countStmt = $this->db->prepare("SELECT COUNT(*) FROM users $where");
+        $countStmt->execute($params);
+        $total = (int)$countStmt->fetchColumn();
 
         return [
             'users' => $users,

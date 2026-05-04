@@ -12,13 +12,107 @@
     <div class="h-6 w-px bg-slate-200 dark:bg-slate-800 lg:hidden" aria-hidden="true"></div>
 
     <div class="flex flex-1 gap-x-4 self-stretch lg:gap-x-6 items-center">
-        <!-- Search placeholder -->
-        <div class="relative flex flex-1">
+        <!-- Global Search -->
+        <div class="relative flex flex-1" x-data="{ 
+            query: '', 
+            results: [], 
+            show: false, 
+            loading: false,
+            async performSearch() {
+                if (this.query.length < 2) {
+                    this.results = [];
+                    this.show = false;
+                    return;
+                }
+                this.loading = true;
+                this.show = true;
+                try {
+                    const response = await fetch(`index.php?route=global_search&q=${encodeURIComponent(this.query)}`);
+                    const data = await response.json();
+                    if (data.success) {
+                        this.results = data.results;
+                    }
+                } catch (e) {
+                    console.error('Search failed', e);
+                } finally {
+                    this.loading = false;
+                }
+            }
+        }" @click.away="show = false">
             <i class="bi bi-search absolute inset-y-0 left-0 flex items-center pl-3 text-slate-400 pointer-events-none"></i>
-            <input class="block h-full w-full border-0 py-0 pl-10 pr-0 text-slate-900 dark:text-slate-100 placeholder:text-slate-400 focus:ring-0 sm:text-sm bg-transparent outline-none" placeholder="<?php echo \Core\I18n::t('search_system'); ?>" type="search">
+            <input class="block h-full w-full border-0 py-0 pl-10 pr-0 text-slate-900 dark:text-slate-100 placeholder:text-slate-400 focus:ring-0 sm:text-sm bg-transparent outline-none" 
+                   placeholder="<?php echo \Core\I18n::t('search_system'); ?>" 
+                   type="search"
+                   x-model="query"
+                   @input.debounce.500ms="performSearch()"
+                   @focus="if(results.length > 0) show = true">
+
+            <!-- Search Results Dropdown -->
+            <div x-show="show" x-cloak
+                 class="absolute left-0 top-full mt-2 w-full max-w-xl bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-100 dark:border-slate-800 overflow-hidden z-[100]"
+                 x-transition:enter="transition ease-out duration-200"
+                 x-transition:enter-start="opacity-0 translate-y-1"
+                 x-transition:enter-end="opacity-100 translate-y-0">
+                
+                <div class="p-2 max-h-[70vh] overflow-y-auto custom-scrollbar">
+                    <template x-if="loading">
+                        <div class="p-8 text-center">
+                            <i class="bi bi-arrow-repeat animate-spin text-2xl text-blue-600"></i>
+                            <p class="text-xs text-slate-400 mt-2 font-bold uppercase tracking-widest">Searching System...</p>
+                        </div>
+                    </template>
+
+                    <template x-if="!loading && results.length === 0">
+                        <div class="p-8 text-center">
+                            <i class="bi bi-search text-2xl text-slate-200 mb-2"></i>
+                            <p class="text-xs text-slate-400 italic">No matches found for "<span x-text="query"></span>"</p>
+                        </div>
+                    </template>
+
+                    <template x-for="res in results" :key="res.type + '-' + res.id">
+                        <a :href="res.url" class="flex items-center gap-4 p-4 hover:bg-slate-50 dark:hover:bg-slate-800 rounded-xl transition-colors group">
+                            <div class="w-10 h-10 rounded-xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-400 group-hover:text-blue-600 transition-colors">
+                                <i class="bi" :class="res.icon"></i>
+                            </div>
+                            <div class="flex-1 min-w-0">
+                                <p class="text-sm font-bold text-slate-800 dark:text-slate-100 truncate" x-text="res.title"></p>
+                                <div class="flex items-center gap-2 mt-0.5">
+                                    <span class="text-[9px] font-black uppercase tracking-widest px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-500" x-text="res.type"></span>
+                                    <span class="text-[10px] text-slate-400 truncate" x-text="res.subtitle"></span>
+                                </div>
+                            </div>
+                            <i class="bi bi-chevron-right text-slate-300 group-hover:text-blue-600 transition-colors"></i>
+                        </a>
+                    </template>
+                </div>
+                
+                <div x-show="results.length > 0" class="px-6 py-3 bg-slate-50 dark:bg-slate-800/50 border-t border-slate-100 dark:border-slate-800 text-[10px] text-slate-400 font-bold uppercase tracking-widest">
+                    Showing top results for <span class="text-blue-600" x-text="'\'' + query + '\''"></span>
+                </div>
+            </div>
         </div>
 
         <div class="flex items-center gap-x-4 lg:gap-x-6">
+            <!-- Digital Clock -->
+            <div x-data="{ 
+                    time: '', 
+                    updateTime() {
+                        const now = new Date();
+                        const options = { 
+                            timeZone: $store.app.timezone, 
+                            hour12: $store.app.timeFormat === '12', 
+                            hour: '2-digit', 
+                            minute: '2-digit', 
+                            second: '2-digit' 
+                        };
+                        this.time = new Intl.DateTimeFormat('en-US', options).format(now);
+                    }
+                }" 
+                x-init="updateTime(); setInterval(() => updateTime(), 1000)"
+                class="hidden sm:block text-base font-mono font-bold text-lime-600 dark:text-[#DFFF00]">
+                <span x-text="time"></span>
+            </div>
+
             <!-- Theme Toggle -->
             <button type="button" @click="toggleTheme()" 
                 class="-m-2.5 p-2.5 text-slate-400 hover:text-blue-600 transition-colors">

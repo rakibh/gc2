@@ -15,8 +15,15 @@ function sortUrl($field, $currentSortBy, $currentSortDir) {
 <div x-data="userManagement()">
     <!-- Header Actions -->
     <div class="bg-white dark:bg-slate-900 rounded-xl shadow-sm border border-slate-100 dark:border-slate-800 overflow-hidden mb-6 transition-colors duration-300">
-        <div class="px-6 py-4 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center bg-slate-50/50 dark:bg-slate-800/50">
-            <h3 class="font-bold text-slate-800 dark:text-slate-100"><?php echo \Core\I18n::t('system_users'); ?></h3>
+        <div class="px-6 py-4 border-b border-slate-100 dark:border-slate-800 flex flex-col md:flex-row md:items-center justify-between gap-4 bg-slate-50/50 dark:bg-slate-800/50">
+            <div class="flex items-center gap-4 flex-1">
+                <h3 class="font-bold text-slate-800 dark:text-slate-100 whitespace-nowrap"><?php echo \Core\I18n::t('system_users'); ?></h3>
+                <div class="relative flex-1 max-w-xs">
+                    <i class="bi bi-search absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"></i>
+                    <input type="text" x-model="search" @input.debounce.500ms="applySearch" placeholder="Search name, username, email..." 
+                        class="w-full pl-10 pr-4 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold outline-none focus:ring-2 focus:ring-blue-500 transition-all">
+                </div>
+            </div>
             <div class="flex items-center space-x-3">
                 <button @click="exportUsers" class="text-slate-600 dark:text-slate-400 hover:text-blue-600 px-3 py-2 rounded-lg text-sm font-bold flex items-center transition-all">
                     <i class="bi bi-download mr-2"></i> Export
@@ -327,6 +334,7 @@ function userManagement() {
         modalMode: 'add',
         loading: false,
         revisions: [],
+        search: new URLSearchParams(window.location.search).get('search') || '',
         formData: {
             user_id: '',
             username: '',
@@ -447,6 +455,16 @@ function userManagement() {
             const h = date.getHours().toString().padStart(2, '0');
             const min = date.getMinutes().toString().padStart(2, '0');
             return `${d}/${m}/${y}, ${h}:${min}`;
+        },
+        applySearch() {
+            const params = new URLSearchParams(window.location.search);
+            if (this.search) {
+                params.set('search', this.search);
+            } else {
+                params.delete('search');
+            }
+            params.set('page', '1');
+            window.location.href = 'index.php?' + params.toString();
         }
     }
 }
