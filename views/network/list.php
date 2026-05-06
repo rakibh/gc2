@@ -78,7 +78,12 @@ $sortDir = $data['sort_dir'] ?? 'DESC';
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-slate-50 dark:divide-slate-800">
-                    <?php $i = ($currentPage - 1) * 20 + 1; foreach($networks as $n): ?>
+                    <?php 
+                    $settingsRepo = new \Modules\Admin\SettingsRepository();
+                    $limit = (int)$settingsRepo->get('records_per_page', 20);
+                    $i = ($currentPage - 1) * $limit + 1; 
+                    foreach($networks as $n): 
+                    ?>
                         <tr class="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
                             <td class="px-6 py-5">
                                 <span class="text-xs font-bold text-slate-400"><?php echo $i++; ?></span>

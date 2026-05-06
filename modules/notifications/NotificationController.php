@@ -127,7 +127,10 @@ class NotificationController
             'date_to' => $_GET['date_to'] ?? ''
         ];
 
-        $res = $this->notificationRepository->getAllPaginated($userId, $page, 20, $filters);
+        $settingsRepo = new \Modules\Admin\SettingsRepository();
+        $limit = (int)$settingsRepo->get('records_per_page', 20);
+
+        $res = $this->notificationRepository->getAllPaginated($userId, $page, $limit, $filters);
 
         return [
             'title' => 'Notifications',

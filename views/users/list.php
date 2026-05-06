@@ -1,10 +1,10 @@
 <?php
 /** @var array $data */
 $users = $data['users'];
-$currentPage = $data['current_page'];
-$totalPages = $data['pages'];
-$sortBy = $data['sort_by'];
-$sortDir = $data['sort_dir'];
+$currentPage = $data['currentPage'] ?? $data['current_page'] ?? 1;
+$totalPages = $data['pages'] ?? 1;
+$sortBy = $data['sort_by'] ?? 'created_at';
+$sortDir = $data['sort_dir'] ?? 'DESC';
 
 function sortUrl($field, $currentSortBy, $currentSortDir) {
     $dir = ($field === $currentSortBy && $currentSortDir === 'ASC') ? 'DESC' : 'ASC';
@@ -63,77 +63,25 @@ function sortUrl($field, $currentSortBy, $currentSortDir) {
                         <th class="px-6 py-3 font-medium text-right"><?php echo \Core\I18n::t('actions'); ?></th>
                     </tr>
                 </thead>
-                <tbody class="divide-y divide-slate-100 dark:divide-slate-800 text-sm">
-                    <?php foreach ($users as $user): ?>
-                        <tr class="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
-                            <td class="px-6 py-4">
-                                <?php if (!empty($user['profile_photo'])): ?>
-                                    <img src="<?php echo htmlspecialchars($user['profile_photo']); ?>" class="w-10 h-10 rounded-xl object-cover border border-slate-200 dark:border-slate-700 shadow-sm">
-                                <?php else: ?>
-                                    <div class="w-10 h-10 rounded-xl bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 flex items-center justify-center font-bold text-xs border border-blue-50 dark:border-blue-900/50">
-                                        <?php echo strtoupper(substr($user['username'], 0, 1)); ?>
-                                    </div>
-                                <?php endif; ?>
-                            </td>
-                            <td class="px-6 py-4">
-                                <div class="flex flex-col">
-                                    <span class="font-bold text-slate-800 dark:text-slate-100"><?php echo htmlspecialchars(($user['first_name'] ?? '') . ' ' . ($user['last_name'] ?? '')); ?></span>
-                                    <span class="text-xs text-slate-500 dark:text-slate-400">@<?php echo htmlspecialchars($user['username']); ?></span>
-                                </div>
-                            </td>
-                            <td class="px-6 py-4 text-slate-600 dark:text-slate-300 font-medium"><?php echo htmlspecialchars($user['employee_id']); ?></td>
-                            <td class="px-6 py-4">
-                                <div class="flex flex-col text-xs space-y-0.5">
-                                    <span class="text-slate-700 dark:text-slate-300 font-medium"><i class="bi bi-envelope mr-1 text-slate-400"></i> <?php echo htmlspecialchars($user['email'] ?? 'N/A'); ?></span>
-                                    <span class="text-slate-500 dark:text-slate-400"><i class="bi bi-phone mr-1 text-slate-400"></i> <?php echo htmlspecialchars($user['phone'] ?? 'N/A'); ?></span>
-                                </div>
-                            </td>
-                            <td class="px-6 py-4">
-                                <span class="px-2 py-1 rounded text-[10px] font-bold uppercase <?php echo $user['role'] === 'admin' ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400' : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400'; ?>">
-                                    <?php echo $user['role']; ?>
-                                </span>
-                            </td>
-                            <td class="px-6 py-4">
-                                <span class="flex items-center text-slate-700 dark:text-slate-300">
-                                    <span class="w-2 h-2 rounded-full mr-2 <?php echo $user['status'] === 'active' ? 'bg-green-500' : 'bg-slate-300 dark:bg-slate-600'; ?>"></span>
-                                    <span class="capitalize"><?php echo $user['status']; ?></span>
-                                </span>
-                            </td>
-                            <td class="px-6 py-4 text-right">
-                                <div class="flex justify-end space-x-1">
-                                    <button @click="openModal('view', <?php echo htmlspecialchars(json_encode($user)); ?>)" class="p-2 text-slate-400 hover:text-blue-600 transition-colors" title="View Details">
-                                        <i class="bi bi-eye"></i>
-                                    </button>
-                                    <button @click="openModal('edit', <?php echo htmlspecialchars(json_encode($user)); ?>)" class="p-2 text-slate-400 hover:text-blue-600 transition-colors" title="Edit User">
-                                        <i class="bi bi-pencil-square"></i>
-                                    </button>
-                                    <button @click="openModal('reset_password', <?php echo htmlspecialchars(json_encode($user)); ?>)" class="p-2 text-slate-400 hover:text-orange-600 transition-colors" title="Reset Password">
-                                        <i class="bi bi-key"></i>
-                                    </button>
-                                    <?php if ($user['id'] != $_SESSION['user_id']): ?>
-                                        <button @click="deleteUser(<?php echo $user['id']; ?>, '<?php echo htmlspecialchars($user['username']); ?>')" :disabled="loading" class="p-2 text-slate-400 hover:text-red-600 transition-colors disabled:opacity-50" title="Delete User">
-                                            <i class="bi bi-trash" x-show="!loading"></i>
-                                            <i class="bi bi-arrow-repeat animate-spin" x-show="loading"></i>
-                                        </button>
-                                    <?php endif; ?>
-                                </div>
-                            </td>
-                        </tr>
-                    <?php endforeach; ?>
+                <tbody class="divide-y divide-slate-100 dark:divide-slate-800 text-sm" id="user-table-body">
+                    <?php require __DIR__ . '/partial_list.php'; ?>
                 </tbody>
             </table>
         </div>
 
         <!-- Pagination -->
-        <div class="px-6 py-4 bg-slate-50/50 dark:bg-slate-800/50 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between">
-            <p class="text-xs text-slate-500 dark:text-slate-400">Showing page <span class="font-bold text-slate-800 dark:text-slate-100"><?php echo $currentPage; ?></span> of <span class="font-bold text-slate-800 dark:text-slate-100"><?php echo $totalPages; ?></span> (<?php echo $data['total']; ?> users)</p>
+        <div class="px-6 py-4 bg-slate-50/50 dark:bg-slate-800/50 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between" id="pagination-container" x-show="totalPages > 1">
+            <p class="text-xs text-slate-500 dark:text-slate-400 font-bold uppercase tracking-widest">
+                Showing page <span class="text-blue-600" x-text="currentPage"></span> of <span x-text="totalPages"></span> (<span x-text="totalItems"></span> total users)
+            </p>
             <div class="flex space-x-1">
-                <?php for($i = 1; $i <= $totalPages; $i++): ?>
-                    <a href="index.php?route=list_users&page=<?php echo $i; ?>&sort_by=<?php echo $sortBy; ?>&sort_dir=<?php echo $sortDir; ?>" 
-                       class="w-8 h-8 flex items-center justify-center rounded-lg text-xs font-bold transition-all <?php echo $i === $currentPage ? 'bg-blue-600 text-white shadow-md' : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-700'; ?>">
-                        <?php echo $i; ?>
-                    </a>
-                <?php endfor; ?>
+                <template x-for="p in totalPages" :key="p">
+                    <button @click="goToPage(p)" 
+                            class="w-8 h-8 flex items-center justify-center rounded-lg text-xs font-bold transition-all border"
+                            :class="p === currentPage ? 'bg-blue-600 text-white shadow-md border-blue-600' : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 border-slate-200 dark:border-slate-700'">
+                        <span x-text="p"></span>
+                    </button>
+                </template>
             </div>
         </div>
     </div>
@@ -335,6 +283,9 @@ function userManagement() {
         loading: false,
         revisions: [],
         search: new URLSearchParams(window.location.search).get('search') || '',
+        currentPage: <?php echo $currentPage; ?>,
+        totalPages: <?php echo $totalPages; ?>,
+        totalItems: <?php echo $data['total']; ?>,
         formData: {
             user_id: '',
             username: '',
@@ -390,13 +341,14 @@ function userManagement() {
                 const result = await response.json();
                 if (result.success) {
                     Alpine.store('app').addToast('Success', result.message, 'success');
-                    setTimeout(() => window.location.reload(), 1000);
+                    this.showModal = false;
+                    this.applySearch(this.currentPage);
                 } else {
                     Alpine.store('app').addToast('Error', result.message, 'error');
-                    this.loading = false;
                 }
             } catch (e) {
                 Alpine.store('app').addToast('Error', 'An unexpected error occurred.', 'error');
+            } finally {
                 this.loading = false;
             }
         },
@@ -434,10 +386,16 @@ function userManagement() {
                     this.loading = true;
                     try {
                         const response = await fetch('index.php?route=delete_user&id=' + id);
-                        Alpine.store('app').addToast('Success', 'User deleted successfully.', 'success');
-                        setTimeout(() => window.location.reload(), 1000);
+                        const result = await response.json();
+                        if (result.success) {
+                            Alpine.store('app').addToast('Success', 'User deleted successfully.', 'success');
+                            this.applySearch(this.currentPage);
+                        } else {
+                            Alpine.store('app').addToast('Error', result.message, 'error');
+                        }
                     } catch (e) {
                         Alpine.store('app').addToast('Error', 'Failed to delete user.', 'error');
+                    } finally {
                         this.loading = false;
                     }
                 }
@@ -448,6 +406,7 @@ function userManagement() {
             window.location.href = 'index.php?route=list_users&export=csv';
         },
         formatDate(dateString) {
+            if (!dateString) return 'N/A';
             const date = new Date(dateString);
             const d = date.getDate().toString().padStart(2, '0');
             const m = (date.getMonth() + 1).toString().padStart(2, '0');
@@ -456,15 +415,41 @@ function userManagement() {
             const min = date.getMinutes().toString().padStart(2, '0');
             return `${d}/${m}/${y}, ${h}:${min}`;
         },
-        applySearch() {
+        async applySearch(page = 1) {
+            this.currentPage = page;
             const params = new URLSearchParams(window.location.search);
             if (this.search) {
                 params.set('search', this.search);
             } else {
                 params.delete('search');
             }
-            params.set('page', '1');
-            window.location.href = 'index.php?' + params.toString();
+            params.set('page', page);
+
+            try {
+                const response = await fetch('index.php?' + params.toString(), {
+                    headers: { 'X-Requested-With': 'XMLHttpRequest' }
+                });
+                const html = await response.text();
+                document.getElementById('user-table-body').innerHTML = html;
+                
+                // Update URL without refresh
+                const newUrl = window.location.pathname + '?' + params.toString();
+                window.history.pushState({ path: newUrl }, '', newUrl);
+
+                // Sync pagination state
+                const meta = document.getElementById('ajax-pagination-meta');
+                if (meta) {
+                    this.totalPages = parseInt(meta.getAttribute('data-pages'));
+                    this.currentPage = parseInt(meta.getAttribute('data-current'));
+                    this.totalItems = parseInt(meta.getAttribute('data-total'));
+                }
+            } catch (e) {
+                console.error('Search failed', e);
+            }
+        },
+        goToPage(page) {
+            if (page < 1 || page > this.totalPages) return;
+            this.applySearch(page);
         }
     }
 }

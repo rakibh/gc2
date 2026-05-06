@@ -144,6 +144,32 @@ class EquipmentRepository extends Repository
     public function getEquipments(array $filters = [], int $page = 1, int $limit = 100): array
     {
         $offset = ($page - 1) * $limit;
+        $params = [];
+        $where = " WHERE 1=1";
+
+        if (!empty($filters['type_id'])) {
+            $where .= " AND e.type_id = :type_id";
+            $params['type_id'] = $filters['type_id'];
+        }
+
+        if (!empty($filters['status'])) {
+            $where .= " AND e.status = :status";
+            $params['status'] = $filters['status'];
+        }
+
+        if (!empty($filters['search'])) {
+            $where .= " AND (e.serial_number LIKE :s1 OR e.brand LIKE :s2 OR e.model LIKE :s3 OR e.location LIKE :s4 OR e.floor LIKE :s5 OR e.department LIKE :s6 OR e.`condition` LIKE :s7 OR e.name LIKE :s8 OR n.ip_address LIKE :s9)";
+            $params['s1'] = '%' . $filters['search'] . '%';
+            $params['s2'] = '%' . $filters['search'] . '%';
+            $params['s3'] = '%' . $filters['search'] . '%';
+            $params['s4'] = '%' . $filters['search'] . '%';
+            $params['s5'] = '%' . $filters['search'] . '%';
+            $params['s6'] = '%' . $filters['search'] . '%';
+            $params['s7'] = '%' . $filters['search'] . '%';
+            $params['s8'] = '%' . $filters['search'] . '%';
+            $params['s9'] = '%' . $filters['search'] . '%';
+        }
+
         $query = "
             SELECT e.*, et.name as type_name, 
             n.ip_address
@@ -151,49 +177,39 @@ class EquipmentRepository extends Repository
             JOIN equipment_types et ON e.type_id = et.id
             LEFT JOIN equipment_network_map enm ON e.id = enm.equipment_id
             LEFT JOIN network_info n ON enm.network_id = n.id
-            WHERE 1=1
+            $where
+            ORDER BY e.created_at DESC 
+            LIMIT :limit OFFSET :offset
         ";
-        $params = [];
-
-        if (!empty($filters['type_id'])) {
-            $query .= " AND e.type_id = :type_id";
-            $params['type_id'] = $filters['type_id'];
-        }
-
-        if (!empty($filters['status'])) {
-            $query .= " AND e.status = :status";
-            $params['status'] = $filters['status'];
-        }
-
-        if (!empty($filters['search'])) {
-            $query .= " AND (e.serial_number LIKE :search OR e.brand LIKE :search OR e.model LIKE :search OR e.location LIKE :search OR e.floor LIKE :search OR e.department LIKE :search OR e.condition LIKE :search)";
-            $params['search'] = '%' . $filters['search'] . '%';
-        }
-
-        $query .= " ORDER BY e.created_at DESC LIMIT $limit OFFSET $offset";
 
         $stmt = $this->db->prepare($query);
-        $stmt->execute($params);
+        foreach ($params as $key => $val) {
+            $stmt->bindValue($key, $val);
+        }
+        $stmt->bindValue(':limit', (int)$limit, PDO::PARAM_INT);
+        $stmt->bindValue(':offset', (int)max(0, $offset), PDO::PARAM_INT);
+        $stmt->execute();
         $items = $stmt->fetchAll();
 
-        // Total count for pagination
-        $countQuery = "
-            SELECT COUNT(*) FROM equipments e 
-            JOIN equipment_types et ON e.type_id = et.id
-            WHERE 1=1
-        ";
-        if (!empty($filters['type_id'])) {
-            $countQuery .= " AND e.type_id = :type_id";
-        }
-        if (!empty($filters['status'])) {
-            $countQuery .= " AND e.status = :status";
-        }
+        // Optimized Total count query
         if (!empty($filters['search'])) {
-            $countQuery .= " AND (e.serial_number LIKE :search OR e.brand LIKE :search OR e.model LIKE :search OR e.location LIKE :search OR e.floor LIKE :search OR e.department LIKE :search OR e.condition LIKE :search)";
+            // Join required for IP address search
+            $countQuery = "
+                SELECT COUNT(*) FROM equipments e 
+                LEFT JOIN equipment_network_map enm ON e.id = enm.equipment_id
+                LEFT JOIN network_info n ON enm.network_id = n.id
+                $where
+            ";
+        } else {
+            // Simple count without extra joins
+            $countQuery = "SELECT COUNT(*) FROM equipments e $where";
         }
 
         $countStmt = $this->db->prepare($countQuery);
-        $countStmt->execute($params);
+        foreach ($params as $key => $val) {
+            $countStmt->bindValue($key, $val);
+        }
+        $countStmt->execute();
         $total = (int)$countStmt->fetchColumn();
 
         return [

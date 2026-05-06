@@ -51,6 +51,14 @@ class AdminRepository extends Repository
             $params['date_to'] = $filters['date_to'] . ' 23:59:59';
         }
 
+        if (!empty($filters['search'])) {
+            $query .= " AND (l.message LIKE :s1 OR l.ip_address LIKE :s2 OR l.user_agent LIKE :s3 OR u.username LIKE :s4)";
+            $params['s1'] = '%' . $filters['search'] . '%';
+            $params['s2'] = '%' . $filters['search'] . '%';
+            $params['s3'] = '%' . $filters['search'] . '%';
+            $params['s4'] = '%' . $filters['search'] . '%';
+        }
+
         $query .= " ORDER BY l.timestamp DESC LIMIT :limit OFFSET :offset";
 
         $stmt = $this->db->prepare($query);
@@ -70,6 +78,7 @@ class AdminRepository extends Repository
         if (!empty($filters['category'])) $filterPart .= " AND l.category = :category";
         if (!empty($filters['date_from'])) $filterPart .= " AND l.timestamp >= :date_from";
         if (!empty($filters['date_to'])) $filterPart .= " AND l.timestamp <= :date_to";
+        if (!empty($filters['search'])) $filterPart .= " AND (l.message LIKE :s1 OR l.ip_address LIKE :s2 OR l.user_agent LIKE :s3 OR u.username LIKE :s4)";
 
         $countStmt = $this->db->prepare($countQuery . $filterPart);
         foreach ($params as $key => $val) {

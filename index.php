@@ -177,6 +177,11 @@ try {
             echo json_encode((new TaskController())->delete($id));
             break;
 
+        case 'task_export':
+            if (!Session::get('user_id')) { header('Location: index.php?route=login'); exit; }
+            (new TaskController())->export();
+            break;
+
         // Network Routes
         case 'list_network':
             if (!Session::get('user_id')) { header('Location: index.php?route=login'); exit; }
@@ -280,6 +285,11 @@ try {
             header('Content-Type: application/json');
             $id = (int)($_GET['id'] ?? 0);
             echo json_encode((new EquipmentController())->deleteType($id));
+            break;
+
+        case 'equipment_export':
+            if (!Session::get('user_id')) { header('Location: index.php?route=login'); exit; }
+            (new EquipmentController())->export();
             break;
 
         case 'equipment_blocks':

@@ -29,8 +29,11 @@ class NetworkRepository extends Repository
         $params = [];
 
         if (!empty($filters['search'])) {
-            $query .= " AND (n.ip_address LIKE :search OR n.cable_no LIKE :search OR n.remarks LIKE :search OR e.serial_number LIKE :search)";
-            $params['search'] = '%' . $filters['search'] . '%';
+            $query .= " AND (n.ip_address LIKE :s1 OR n.cable_no LIKE :s2 OR n.remarks LIKE :s3 OR e.serial_number LIKE :s4)";
+            $params['s1'] = '%' . $filters['search'] . '%';
+            $params['s2'] = '%' . $filters['search'] . '%';
+            $params['s3'] = '%' . $filters['search'] . '%';
+            $params['s4'] = '%' . $filters['search'] . '%';
         }
 
         if (!empty($filters['status'])) {
@@ -68,7 +71,7 @@ class NetworkRepository extends Repository
         ";
         // Re-apply same filters for count
         if (!empty($filters['search'])) {
-            $countQuery .= " AND (n.ip_address LIKE :search OR n.cable_no LIKE :search OR n.remarks LIKE :search OR e.serial_number LIKE :search)";
+            $countQuery .= " AND (n.ip_address LIKE :s1 OR n.cable_no LIKE :s2 OR n.remarks LIKE :s3 OR e.serial_number LIKE :s4)";
         }
         if (!empty($filters['status'])) {
             if ($filters['status'] === 'assigned') { $countQuery .= " AND e.id IS NOT NULL"; }
@@ -76,11 +79,7 @@ class NetworkRepository extends Repository
         }
 
         $countStmt = $this->db->prepare($countQuery);
-        if (!empty($filters['search'])) {
-            $countStmt->execute(['search' => '%' . $filters['search'] . '%']);
-        } else {
-            $countStmt->execute();
-        }
+        $countStmt->execute($params);
         $total = (int)$countStmt->fetchColumn();
 
         return [

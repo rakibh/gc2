@@ -93,7 +93,23 @@ class EquipmentController
             'search' => $_GET['search'] ?? null
         ];
 
-        $res = $this->equipmentRepository->getEquipments($filters, $page);
+        $settingsRepo = new \Modules\Admin\SettingsRepository();
+        $limit = (int)$settingsRepo->get('records_per_page', 20);
+
+        $res = $this->equipmentRepository->getEquipments($filters, $page, $limit);
+
+        // If AJAX request, return only the partial table body
+        if (!empty($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest') {
+            header('Content-Type: text/html');
+            $data = [
+                'equipments' => $res['items'],
+                'filters' => $filters,
+                'pages' => $res['pages'],
+                'currentPage' => $page
+            ];
+            require __DIR__ . '/../../views/equipment/partial_list.php';
+            exit;
+        }
 
         return [
             'title' => 'Equipment Inventory',
@@ -385,5 +401,127 @@ class EquipmentController
         } catch (Exception $e) {
             return ['success' => false, 'message' => $e->getMessage()];
         }
+    }
+
+    /**
+     * Export equipment data to CSV.
+     */
+    public function export(): void
+    {
+        $typeId = !empty($_GET['type_id']) ? (int)$_GET['type_id'] : null;
+        $ids = !empty($_GET['ids']) ? explode(',', $_GET['ids']) : [];
+
+        if (!$typeId && empty($ids)) {
+            die("Error: Please select a category or specific items to export.");
+        }
+
+        // If specific IDs are provided, we need to determine the type if not set
+        if (!empty($ids) && !$typeId) {
+            $firstId = (int)$ids[0];
+            $firstEq = $this->equipmentRepository->getEquipmentById($firstId);
+            if ($firstEq) $typeId = (int)$firstEq['type_id'];
+        }
+
+        if (!$typeId) {
+            die("Error: Equipment category is required for export to ensure consistent columns.");
+        }
+
+        $type = $this->equipmentRepository->getTypeById($typeId);
+        if (!$type) die("Error: Invalid category.");
+
+        // Get equipment items
+        $filters = ['type_id' => $typeId];
+        // If specific IDs selected, we'll filter by them later or use a different repo method
+        // For simplicity, let's fetch all and filter in PHP if IDs are present
+        $res = $this->equipmentRepository->getEquipments($filters, 1, 10000); // High limit for export
+        $items = $res['items'];
+
+        if (!empty($ids)) {
+            $items = array_filter($items, fn($e) => in_array($e['id'], $ids));
+        }
+
+        if (empty($items)) die("Error: No data to export.");
+
+        // 1. Type/Category
+        $headers = ['Type/Category'];
+        
+        // 2. Identification
+        $headers = array_merge($headers, ['Label', 'Brand', 'Model', 'Serial Number']);
+        
+        // 3. Specifications (Dynamic)
+        $schema = json_decode($type['form_schema'] ?? '[]', true);
+        $customColNames = [];
+        foreach ($schema as $field) {
+            $headers[] = $field['label'];
+            $customColNames[] = $field['name'];
+        }
+
+        // 4. Network Connection
+        $headers = array_merge($headers, ['MAC Address', 'IP Address']);
+
+        // 5. Warranty Info
+        $headers = array_merge($headers, ['Warranty Seller', 'Purchase Date', 'Expiry Date']);
+
+        // 6. Status & Condition
+        $headers = array_merge($headers, ['Status', 'Condition']);
+
+        // 7. Location & Allocated
+        $headers = array_merge($headers, ['Office Location', 'Floor', 'Department / Room', 'Assigned To']);
+
+        // 8. Meta
+        $headers[] = 'Date Added';
+
+        // Generate CSV
+        header('Content-Type: text/csv; charset=utf-8');
+        header('Content-Disposition: attachment; filename="Equipment_Export_' . str_replace(' ', '_', $type['name']) . '_' . date('Y-m-d') . '.csv"');
+        
+        $output = fopen('php://output', 'w');
+        fputcsv($output, $headers);
+
+        foreach ($items as $e) {
+            $customData = json_decode($e['custom_data'] ?? '[]', true);
+            
+            // Start Row with Type/Category
+            $row = [$e['type_name']];
+
+            // Identification
+            $row[] = $e['name'];
+            $row[] = $e['brand'] ?? '';
+            $row[] = $e['model'] ?? '';
+            $row[] = $e['serial_number'] ?? '';
+
+            // Specifications (Dynamic)
+            foreach ($customColNames as $colName) {
+                $val = $customData[$colName] ?? '';
+                $row[] = is_array($val) ? implode(', ', $val) : $val;
+            }
+
+            // Network Connection
+            $row[] = $e['mac_address'] ?? '';
+            $row[] = $e['ip_address'] ?? '';
+
+            // Warranty Info
+            $row[] = $e['warranty_seller'] ?? '';
+            $row[] = $e['warranty_purchase_date'] ?? '';
+            $row[] = $e['warranty_expiry'] ?? '';
+
+            // Status & Condition
+            $row[] = $e['status'];
+            $row[] = ucfirst($e['condition'] ?? '');
+
+            // Location & Allocated
+            $row[] = $e['office_location'] ?? '';
+            $row[] = $e['floor'] ?? '';
+            $row[] = $e['department'] ?? '';
+            $row[] = $e['assigned_to'] ?? '';
+
+            // Meta
+            $row[] = $e['created_at'];
+
+            fputcsv($output, $row);
+        }
+
+        fclose($output);
+        exit;
     }
 }

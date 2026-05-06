@@ -21,6 +21,7 @@ class TaskController
      */
     public function list(): array
     {
+        $page = (int)($_GET['page'] ?? 1);
         $tab = $_GET['tab'] ?? 'board';
         $filters = [
             'tab' => $tab,
@@ -31,11 +32,19 @@ class TaskController
             'sort_dir' => $_GET['sort_dir'] ?? 'ASC'
         ];
 
+        $settingsRepo = new \Modules\Admin\SettingsRepository();
+        $limit = (int)$settingsRepo->get('records_per_page', 20);
+
+        $res = $this->taskRepository->getTasks($filters, $page, $limit);
+
         return [
             'title' => 'Task Management',
             'view' => 'views/tasks/list.php',
             'data' => [
-                'tasks' => $this->taskRepository->getTasks($filters),
+                'tasks' => $res['items'],
+                'total' => $res['total'],
+                'pages' => $res['pages'],
+                'currentPage' => $page,
                 'counts' => $this->taskRepository->getStatusCounts(),
                 'filters' => $filters,
                 'users' => (new \Modules\Auth\UserRepository())->getUsers(1, 1000)['users']
@@ -296,6 +305,46 @@ class TaskController
         } catch (Exception $e) {
             return ['success' => false, 'message' => $e->getMessage()];
         }
+    }
+
+    /**
+     * Export tasks to CSV.
+     */
+    public function export(): void
+    {
+        $filters = [
+            'tab' => $_GET['tab'] ?? 'board',
+            'priority' => $_GET['priority'] ?? null,
+            'search' => $_GET['search'] ?? null,
+            'assignee_id' => $_GET['assignee_id'] ?? null,
+            'sort_by' => $_GET['sort_by'] ?? 'deadline',
+            'sort_dir' => $_GET['sort_dir'] ?? 'ASC'
+        ];
+
+        $tasks = $this->taskRepository->getTasks($filters);
+
+        header('Content-Type: text/csv; charset=utf-8');
+        header('Content-Disposition: attachment; filename="Tasks_Export_' . date('Y-m-d') . '.csv"');
+
+        $output = fopen('php://output', 'w');
+        fputcsv($output, ['Title', 'Description', 'Priority', 'Status', 'Deadline', 'Creator', 'Assignees', 'Tags', 'Created At']);
+
+        foreach ($tasks as $task) {
+            fputcsv($output, [
+                $task['title'],
+                $task['description'],
+                ucfirst($task['priority']),
+                ucfirst(str_replace('_', ' ', $task['status'])),
+                $task['deadline'] ? date('d/m/Y', strtotime($task['deadline'])) : 'No Deadline',
+                $task['creator_name'],
+                $task['assignee_names'] ?? 'Unassigned',
+                $task['tags'] ?? '',
+                date('d/m/Y H:i', strtotime($task['created_at']))
+            ]);
+        }
+
+        fclose($output);
+        exit;
     }
 
     /**

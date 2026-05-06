@@ -33,7 +33,10 @@ class NetworkController
             'status' => $_GET['status'] ?? ''
         ];
 
-        $result = $this->networkRepository->getNetworks($page, 20, $sortBy, $sortDir, $filters);
+        $settingsRepo = new \Modules\Admin\SettingsRepository();
+        $limit = (int)$settingsRepo->get('records_per_page', 20);
+
+        $result = $this->networkRepository->getNetworks($page, $limit, $sortBy, $sortDir, $filters);
         $unassignedEquip = $this->networkRepository->getUnassignedEquipment();
 
         return [

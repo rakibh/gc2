@@ -30,7 +30,24 @@ class UserController
         $sortDir = $_GET['sort_dir'] ?? 'DESC';
         $search = $_GET['search'] ?? null;
 
-        $result = $this->userRepository->getUsers($page, 20, $sortBy, $sortDir, $search);
+        $settingsRepo = new \Modules\Admin\SettingsRepository();
+        $limit = (int)$settingsRepo->get('records_per_page', 20);
+
+        $result = $this->userRepository->getUsers($page, $limit, $sortBy, $sortDir, $search);
+
+        // If AJAX request, return only the partial table body
+        if (!empty($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest') {
+            header('Content-Type: text/html');
+            $data = [
+                'users' => $result['users'],
+                'total' => $result['total'],
+                'pages' => $result['pages'],
+                'currentPage' => $page,
+                'current_page' => $page
+            ];
+            require __DIR__ . '/../../views/users/partial_list.php';
+            exit;
+        }
 
         return [
             'title' => 'User Management',
@@ -39,6 +56,7 @@ class UserController
                 'users' => $result['users'],
                 'total' => $result['total'],
                 'pages' => $result['pages'],
+                'currentPage' => $page,
                 'current_page' => $page,
                 'sort_by' => $sortBy,
                 'sort_dir' => $sortDir,

@@ -82,16 +82,21 @@ $priorityColors = [
                     </div>
 
                     <div @click="$store.app.goToNotification(<?php echo htmlspecialchars(json_encode($n)); ?>)" class="flex-1 flex items-center gap-4 min-w-0">
-                        <div class="p-2.5 rounded-xl flex-shrink-0 <?php echo $priorityColors[$n['priority']] ?? $priorityColors['medium']; ?>">
-                            <?php 
-                                $icon = 'bi-bell';
-                                if ($n['type'] === 'task') $icon = 'bi-list-check';
-                                if ($n['type'] === 'equipment') $icon = 'bi-pc-display';
-                                if ($n['type'] === 'network') $icon = 'bi-diagram-3';
-                                if ($n['type'] === 'user') $icon = 'bi-people';
-                                if ($n['type'] === 'warranty') $icon = 'bi-shield-check';
-                                if ($n['priority'] === 'urgent') $icon = 'bi-exclamation-triangle-fill';
-                            ?>
+                        <?php 
+                            $icon = 'bi-bell';
+                            if ($n['type'] === 'task') $icon = 'bi-list-check';
+                            if ($n['type'] === 'equipment') $icon = 'bi-pc-display';
+                            if ($n['type'] === 'network') $icon = 'bi-diagram-3';
+                            if ($n['type'] === 'user') $icon = 'bi-people';
+                            if ($n['type'] === 'warranty') $icon = 'bi-shield-check';
+                            if ($n['priority'] === 'urgent') $icon = 'bi-exclamation-triangle-fill';
+
+                            $colorClass = $priorityColors[$n['priority']] ?? $priorityColors['medium'];
+                            if ($n['is_read']) {
+                                $colorClass = 'bg-slate-100 text-slate-400 dark:bg-slate-800 dark:text-slate-500';
+                            }
+                        ?>
+                        <div class="p-2.5 rounded-xl flex-shrink-0 <?php echo $colorClass; ?>">
                             <i class="bi <?php echo $icon; ?> text-lg"></i>
                         </div>
                         
@@ -138,27 +143,20 @@ $priorityColors = [
 
     <!-- Pagination -->
     <?php if ($totalPages > 1): ?>
-        <div class="flex items-center justify-between pt-4">
-            <p class="text-xs text-slate-500">
-                Showing page <?php echo $currentPage; ?> of <?php echo $totalPages; ?>
+        <div class="mt-8 bg-white dark:bg-slate-900 rounded-3xl border border-slate-100 dark:border-slate-800 shadow-sm overflow-hidden flex items-center justify-between px-6 py-4 transition-colors">
+            <p class="text-xs text-slate-500 dark:text-slate-400 font-bold uppercase tracking-widest">
+                Showing page <span class="text-blue-600"><?php echo $currentPage; ?></span> of <span><?php echo $totalPages; ?></span> (<?php echo $data['total']; ?> notifications)
             </p>
-            <div class="flex gap-2">
+            <div class="flex space-x-1">
                 <?php 
                 $baseUrl = "index.php?route=list_notifications&status={$filters['status']}&date_from={$filters['date_from']}&date_to={$filters['date_to']}";
+                for($i = 1; $i <= $totalPages; $i++): 
                 ?>
-                <?php if ($currentPage > 1): ?>
-                    <a href="<?php echo $baseUrl; ?>&page=<?php echo $currentPage - 1; ?>" 
-                       class="px-4 py-2 text-xs font-bold text-slate-600 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl hover:bg-slate-50 transition-all shadow-sm">
-                        Previous
+                    <a href="<?php echo $baseUrl; ?>&page=<?php echo $i; ?>" 
+                       class="w-8 h-8 flex items-center justify-center rounded-lg text-xs font-bold transition-all border <?php echo $i === $currentPage ? 'bg-blue-600 text-white shadow-md border-blue-600' : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 border-slate-200 dark:border-slate-700'; ?>">
+                        <?php echo $i; ?>
                     </a>
-                <?php endif; ?>
-                
-                <?php if ($currentPage < $totalPages): ?>
-                    <a href="<?php echo $baseUrl; ?>&page=<?php echo $currentPage + 1; ?>" 
-                       class="px-4 py-2 text-xs font-bold text-slate-600 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl hover:bg-slate-50 transition-all shadow-sm">
-                        Next
-                    </a>
-                <?php endif; ?>
+                <?php endfor; ?>
             </div>
         </div>
     <?php endif; ?>

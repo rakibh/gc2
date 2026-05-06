@@ -283,6 +283,22 @@ $priorityColors = [
             </table>
         </div>
     <?php endif; ?>
+
+    <!-- Unified Pagination -->
+    <div class="mt-8 bg-white dark:bg-slate-900 rounded-3xl border border-slate-100 dark:border-slate-800 shadow-sm overflow-hidden flex items-center justify-between px-6 py-4 transition-colors" x-show="totalPages > 1">
+        <p class="text-xs text-slate-500 dark:text-slate-400 font-bold uppercase tracking-widest">
+            Showing page <span class="text-blue-600" x-text="currentPage"></span> of <span x-text="totalPages"></span> (<?php echo $data['total']; ?> total tasks)
+        </p>
+        <div class="flex space-x-1">
+            <template x-for="p in totalPages" :key="p">
+                <button @click="goToPage(p)" 
+                        class="w-8 h-8 flex items-center justify-center rounded-lg text-xs font-bold transition-all border"
+                        :class="p === currentPage ? 'bg-blue-600 text-white shadow-md border-blue-600' : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 border-slate-200 dark:border-slate-700'">
+                    <span x-text="p"></span>
+                </button>
+            </template>
+        </div>
+    </div>
 </div>
 
 <script>
@@ -299,12 +315,16 @@ function taskManagement() {
             tab: '<?php echo $activeTab; ?>'
         },
         sort_option: `${sortBy}_${sortDir}`,
+        totalPages: <?php echo $data['pages']; ?>,
+        currentPage: <?php echo $data['currentPage']; ?>,
         applyFilters() {
             const params = new URLSearchParams(window.location.search);
+            params.set('route', 'list_tasks');
             Object.keys(this.filters).forEach(key => {
                 if (this.filters[key]) params.set(key, this.filters[key]);
                 else params.delete(key);
             });
+            params.set('page', '1');
             window.location.href = 'index.php?' + params.toString();
         },
         applySorting() {
@@ -314,6 +334,13 @@ function taskManagement() {
             const params = new URLSearchParams(window.location.search);
             params.set('sort_by', field);
             params.set('sort_dir', dir);
+            params.set('page', '1');
+            window.location.href = 'index.php?' + params.toString();
+        },
+        goToPage(page) {
+            if (page < 1 || page > this.totalPages) return;
+            const params = new URLSearchParams(window.location.search);
+            params.set('page', page);
             window.location.href = 'index.php?' + params.toString();
         },
         openAddModal() {
@@ -323,8 +350,18 @@ function taskManagement() {
             window.location.href = 'index.php?route=view_task&id=' + id;
         },
         exportTasks() {
+            const params = new URLSearchParams();
+            Object.keys(this.filters).forEach(key => {
+                if (this.filters[key]) params.set(key, this.filters[key]);
+            });
+            
+            const sortBy = new URLSearchParams(window.location.search).get('sort_by') || 'deadline';
+            const sortDir = new URLSearchParams(window.location.search).get('sort_dir') || 'ASC';
+            params.set('sort_by', sortBy);
+            params.set('sort_dir', sortDir);
+
             Alpine.store('app').addToast('Export', 'Exporting current view to CSV...', 'success');
-            // In a real app, this would redirect to an export route with current filters
+            window.location.href = 'index.php?route=task_export&' + params.toString();
         }
     }
 }

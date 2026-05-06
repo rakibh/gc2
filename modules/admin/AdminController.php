@@ -48,6 +48,7 @@ class AdminController
             'category' => $_GET['category'] ?? null,
             'date_from' => $_GET['date_from'] ?? null,
             'date_to' => $_GET['date_to'] ?? null,
+            'search' => $_GET['search'] ?? null,
         ];
 
         // Handle Export

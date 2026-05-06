@@ -24,8 +24,12 @@ class UserRepository extends Repository
         $where = "";
         $params = [];
         if ($search) {
-            $where = " WHERE (username LIKE :search OR first_name LIKE :search OR last_name LIKE :search OR email LIKE :search OR employee_id LIKE :search)";
-            $params['search'] = '%' . $search . '%';
+            $where = " WHERE (username LIKE :s1 OR first_name LIKE :s2 OR last_name LIKE :s3 OR email LIKE :s4 OR employee_id LIKE :s5)";
+            $params['s1'] = '%' . $search . '%';
+            $params['s2'] = '%' . $search . '%';
+            $params['s3'] = '%' . $search . '%';
+            $params['s4'] = '%' . $search . '%';
+            $params['s5'] = '%' . $search . '%';
         }
 
         $stmt = $this->db->prepare("
@@ -39,8 +43,8 @@ class UserRepository extends Repository
         foreach ($params as $key => $val) {
             $stmt->bindValue($key, $val);
         }
-        $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
-        $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
+        $stmt->bindValue(':limit', (int)$limit, PDO::PARAM_INT);
+        $stmt->bindValue(':offset', (int)max(0, $offset), PDO::PARAM_INT);
         $stmt->execute();
         
         $users = $stmt->fetchAll();

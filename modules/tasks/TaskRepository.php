@@ -11,12 +11,55 @@ use Exception;
 class TaskRepository extends Repository
 {
     /**
-     * Get tasks with advanced filtering.
+     * Get tasks with advanced filtering and pagination.
      */
-    public function getTasks(array $filters = []): array
+    public function getTasks(array $filters = [], int $page = 1, int $limit = 20): array
     {
         // Automation: Check deadlines and trigger notifications
         $this->checkDeadlines();
+
+        $offset = ($page - 1) * $limit;
+        $params = [];
+
+        $where = " WHERE 1=1";
+
+        // Tab Logic
+        if (!empty($filters['tab'])) {
+            if ($filters['tab'] === 'board') {
+                $where .= " AND t.status IN ('todo', 'doing', 'past_due')";
+            } elseif ($filters['tab'] === 'done') {
+                $where .= " AND t.status = 'done'";
+            } elseif ($filters['tab'] === 'dropped') {
+                $where .= " AND t.status = 'dropped'";
+            }
+            // 'all' doesn't need status filter
+        }
+
+        if (!empty($filters['priority'])) {
+            $where .= " AND t.priority = :priority";
+            $params['priority'] = $filters['priority'];
+        }
+
+        if (!empty($filters['assignee_id'])) {
+            $where .= " AND t.id IN (SELECT task_id FROM task_assignees WHERE user_id = :assignee_id)";
+            $params['assignee_id'] = $filters['assignee_id'];
+        }
+
+        if (!empty($filters['search'])) {
+            $where .= " AND (t.title LIKE :s1 OR t.description LIKE :s2 OR t.tags LIKE :s3)";
+            $params['s1'] = '%' . $filters['search'] . '%';
+            $params['s2'] = '%' . $filters['search'] . '%';
+            $params['s3'] = '%' . $filters['search'] . '%';
+        }
+
+        $sortBy = $filters['sort_by'] ?? 'deadline';
+        $sortDir = strtoupper($filters['sort_dir'] ?? 'ASC');
+        
+        $allowedSort = ['deadline', 'created_at', 'priority', 'status'];
+        if (!in_array($sortBy, $allowedSort)) $sortBy = 'deadline';
+        
+        $allowedDir = ['ASC', 'DESC'];
+        if (!in_array($sortDir, $allowedDir)) $sortDir = 'ASC';
 
         $query = "
             SELECT t.*, u.username as creator_name, u.profile_photo as creator_photo,
@@ -28,52 +71,40 @@ class TaskRepository extends Repository
             LEFT JOIN users u ON t.creator_id = u.id
             LEFT JOIN task_assignees ta ON t.id = ta.task_id
             LEFT JOIN users ua ON ta.user_id = ua.id
-            WHERE 1=1
+            $where
+            GROUP BY t.id 
+            ORDER BY $sortBy $sortDir
+            LIMIT :limit OFFSET :offset
         ";
 
-        $params = [];
-
-        // Tab Logic
-        if (!empty($filters['tab'])) {
-            if ($filters['tab'] === 'board') {
-                $query .= " AND t.status IN ('todo', 'doing', 'past_due')";
-            } elseif ($filters['tab'] === 'done') {
-                $query .= " AND t.status = 'done'";
-            } elseif ($filters['tab'] === 'dropped') {
-                $query .= " AND t.status = 'dropped'";
-            }
-            // 'all' doesn't need status filter
-        }
-
-        if (!empty($filters['priority'])) {
-            $query .= " AND t.priority = :priority";
-            $params['priority'] = $filters['priority'];
-        }
-
-        if (!empty($filters['assignee_id'])) {
-            $query .= " AND t.id IN (SELECT task_id FROM task_assignees WHERE user_id = :assignee_id)";
-            $params['assignee_id'] = $filters['assignee_id'];
-        }
-
-        if (!empty($filters['search'])) {
-            $query .= " AND (t.title LIKE :search OR t.description LIKE :search OR t.tags LIKE :search OR ua.username LIKE :search)";
-            $params['search'] = '%' . $filters['search'] . '%';
-        }
-
-        $sortBy = $filters['sort_by'] ?? 'deadline';
-        $sortDir = strtoupper($filters['sort_dir'] ?? 'ASC');
-        
-        $allowedSort = ['deadline', 'created_at', 'priority', 'status'];
-        if (!in_array($sortBy, $allowedSort)) $sortBy = 'deadline';
-        
-        $allowedDir = ['ASC', 'DESC'];
-        if (!in_array($sortDir, $allowedDir)) $sortDir = 'ASC';
-        
-        $query .= " GROUP BY t.id ORDER BY $sortBy $sortDir";
-
         $stmt = $this->db->prepare($query);
-        $stmt->execute($params);
-        return $stmt->fetchAll();
+        foreach ($params as $key => $val) {
+            $stmt->bindValue($key, $val);
+        }
+        $stmt->bindValue(':limit', (int)$limit, PDO::PARAM_INT);
+        $stmt->bindValue(':offset', (int)max(0, $offset), PDO::PARAM_INT);
+        $stmt->execute();
+        $items = $stmt->fetchAll();
+
+        // Total count
+        $countQuery = "SELECT COUNT(*) FROM tasks t $where";
+        if (!empty($filters['search']) || !empty($filters['assignee_id'])) {
+             // For complex search, we might need a more complex count, but let's try simple first
+             $countQuery = "SELECT COUNT(DISTINCT t.id) FROM tasks t LEFT JOIN task_assignees ta ON t.id = ta.task_id LEFT JOIN users ua ON ta.user_id = ua.id $where";
+        }
+
+        $countStmt = $this->db->prepare($countQuery);
+        foreach ($params as $key => $val) {
+            $countStmt->bindValue($key, $val);
+        }
+        $countStmt->execute();
+        $total = (int)$countStmt->fetchColumn();
+
+        return [
+            'items' => $items,
+            'total' => $total,
+            'pages' => ceil($total / $limit)
+        ];
     }
 
     /**
