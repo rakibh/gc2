@@ -60,6 +60,8 @@ class SettingsController
                 Session::set('session_timeout', $data['session_timeout']);
             }
 
+            (new AdminRepository())->logEvent('info', 'system', 'System settings updated by administrator.');
+
             return ['success' => true, 'message' => 'Settings updated successfully.'];
         } catch (Exception $e) {
             return ['success' => false, 'message' => $e->getMessage()];

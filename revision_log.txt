@@ -1,0 +1,33 @@
+EXAMPLES 
+
+Equipment Changes
+Rahim updated Switch Location from "IDF-2" to "IDF 222"
+Rahim updated Cable No from "CBL-215" to "CBL-1254"
+Rahim updated Equipment Status from "Available" to "In Use"
+Rahim assigned Dell Laptop #123 to Mohammad Rahman
+Rahim uploaded warranty document for Dell Laptop #123
+Rahim updated Brand from "Dell" to "HP"
+Rahim updated Serial Number from "DL5420XYZ" to "HP840G7XYZ"
+
+
+ Task Changes
+Karim updated Task Status from "To Do" to "Doing"
+Karim updated Priority from "Medium" to "High"
+Karim updated Due Date from "Jan 20" to "Jan 25"
+Karim assigned Server Maintenance to Mohammad Rahman
+Karim uploaded attachment to "Server Maintenance" task
+Karim updated Description for "Server Maintenance" task
+
+Network Changes
+Rahim updated IP Address from "192.168.1.100" to "192.168.1.150"
+Rahim updated MAC Address from "00:1B:44:11:3A:B7" to "00:1B:44:11:3A:C8"
+Rahim assigned IP 192.168.1.100 to Dell Laptop #123
+Rahim updated Patch Panel Port from "12" to "24"
+Rahim updated Switch Location from "IDF-2" to "IDF 222"
+
+User Profile Changes
+Rahim updated Profile Picture
+Rahim updated Email from "rahim@old.com" to "rahim@new.com"
+Rahim updated Phone from "+8801711111111" to "+8801722222222"
+Rahim updated Password
+Admin changed Role for Mohammad Rahman from "User" to "Admin"

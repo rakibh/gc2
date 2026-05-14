@@ -1,5 +1,6 @@
 <?php
 /** @var array $data */
+include_once __DIR__ . '/../layouts/audit_helper.php';
 $e = $data['equipment'];
 $customData = $e['custom_data'] ? (is_string($e['custom_data']) ? json_decode($e['custom_data'], true) : $e['custom_data']) : [];
 $schema = $e['form_schema'] ? (is_string($e['form_schema']) ? json_decode($e['form_schema'], true) : $e['form_schema']) : [];
@@ -150,21 +151,24 @@ $images = $e['images'] ? (is_string($e['images']) ? json_decode($e['images'], tr
             <?php if (!empty($images)): ?>
             <div class="bg-white dark:bg-slate-900 rounded-3xl border border-slate-100 dark:border-slate-800 shadow-sm overflow-hidden">
                 <div class="px-8 py-5 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-100 dark:border-slate-800 flex items-center gap-3">
-                    <i class="bi bi-images text-indigo-500"></i>
-                    <h3 class="text-xs font-black text-slate-400 uppercase tracking-widest">Equipment Gallery</h3>
+                    <i class="bi bi-images text-blue-500"></i>
+                    <h3 class="text-xs font-black text-slate-400 uppercase tracking-widest">Equipment Photos</h3>
                 </div>
                 <div class="p-8">
-                    <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div class="grid grid-cols-2 sm:grid-cols-3 gap-4">
                         <?php foreach ($images as $img): ?>
-                        <div @click="selectedImage = '<?php echo $img; ?>'; showModal = true" 
-                             class="aspect-square rounded-2xl overflow-hidden border border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-800 cursor-pointer hover:ring-2 hover:ring-blue-500 transition-all group">
+                        <div @click="selectedImage = '<?php echo $img; ?>'; showModal = true" class="group relative aspect-square rounded-2xl overflow-hidden cursor-zoom-in bg-slate-100 dark:bg-slate-800 border border-slate-100 dark:border-slate-700">
                             <img src="<?php echo $img; ?>" class="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500">
+                            <div class="absolute inset-0 bg-slate-900/0 group-hover:bg-slate-900/20 transition-colors flex items-center justify-center">
+                                <i class="bi bi-zoom-in text-white opacity-0 group-hover:opacity-100 transition-opacity text-2xl"></i>
+                            </div>
                         </div>
                         <?php endforeach; ?>
                     </div>
                 </div>
             </div>
             <?php endif; ?>
+
         </div>
 
         <!-- Sidebar Info -->

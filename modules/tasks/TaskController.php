@@ -33,7 +33,9 @@ class TaskController
         ];
 
         $settingsRepo = new \Modules\Admin\SettingsRepository();
-        $limit = (int)$settingsRepo->get('records_per_page', 20);
+        $limit = ($tab === 'all') 
+            ? (int)$settingsRepo->get('records_per_page', 20)
+            : 1000; // No limitation for board/other tabs
 
         $res = $this->taskRepository->getTasks($filters, $page, $limit);
 
@@ -105,6 +107,7 @@ class TaskController
             $assignees = $data['assignees'] ?? [];
             
             $taskId = $this->taskRepository->createTask($taskData, $assignees);
+            (new \Modules\Admin\AdminRepository())->logEvent('info', 'task', "New task created: " . $taskData['title'], ['task_id' => $taskId]);
 
             // Handle Uploads if any
             if (!empty($_FILES['attachments'])) {
@@ -147,6 +150,7 @@ class TaskController
             $assignees = $data['assignees'] ?? [];
 
             $this->taskRepository->updateTask($id, $taskData, $assignees);
+            (new \Modules\Admin\AdminRepository())->logEvent('info', 'task', "Task updated: " . ($taskData['title'] ?? $id), ['task_id' => $id]);
 
             // Handle Uploads
             if (!empty($_FILES['attachments'])) {
@@ -167,28 +171,15 @@ class TaskController
         $task = $this->taskRepository->getTaskById($id);
         if (!$task) throw new Exception("Task not found.");
 
-        // Get audit logs for this task
-        $db = \Core\Database::getInstance();
-        $stmt = $db->prepare("
-            SELECT a.*, u.username 
-            FROM audit_logs a 
-            LEFT JOIN users u ON a.user_id = u.id 
-            WHERE target_table = 'tasks' AND target_id = ? 
-            ORDER BY created_at DESC
-        ");
-        $stmt->execute([$id]);
-        $logs = $stmt->fetchAll();
-
         return [
             'title' => 'Task Details',
             'view' => 'views/tasks/view.php',
             'data' => [
                 'task' => $task,
-                'logs' => $logs
+                'logs' => $this->taskRepository->getRevisionHistory('tasks', $id)
             ]
         ];
     }
-
     private function sanitizeTaskData(array $data): array
     {
         return [
@@ -301,6 +292,7 @@ class TaskController
             }
 
             $this->taskRepository->deleteTask($id);
+            (new \Modules\Admin\AdminRepository())->logEvent('info', 'task', "Task deleted (ID: $id)");
             return ['success' => true, 'message' => 'Task deleted.'];
         } catch (Exception $e) {
             return ['success' => false, 'message' => $e->getMessage()];
@@ -321,7 +313,8 @@ class TaskController
             'sort_dir' => $_GET['sort_dir'] ?? 'ASC'
         ];
 
-        $tasks = $this->taskRepository->getTasks($filters);
+        $res = $this->taskRepository->getTasks($filters, 1, 10000); // Higher limit for export
+        $tasks = $res['items'];
 
         header('Content-Type: text/csv; charset=utf-8');
         header('Content-Disposition: attachment; filename="Tasks_Export_' . date('Y-m-d') . '.csv"');

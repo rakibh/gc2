@@ -74,6 +74,8 @@ class PreferencesController
                 Session::set('user_desktop_notifications', (int)$data['desktop_notifications']);
                 Session::set('user_notification_types', json_encode($data['notification_types'] ?? []));
                 
+                (new \Modules\Admin\AdminRepository())->logEvent('info', 'user', 'User preferences updated.');
+
                 return ['success' => true, 'message' => 'Preferences saved successfully.'];
             }
             

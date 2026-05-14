@@ -3,7 +3,7 @@
 $user = $data['user'];
 ?>
 
-<div class="max-w-4xl mx-auto" x-data="profileManagement(<?php echo htmlspecialchars(json_encode($user)); ?>)">
+<div class="max-w-4xl mx-auto" x-data="profileManagement(<?php echo htmlspecialchars(json_encode($user)); ?>)" x-init="if(window.location.search.includes('force=1')) showPwModal = true">
     <!-- Forced Password Change Alert -->
     <?php if (isset($_GET['force'])): ?>
         <div class="mb-6 bg-orange-50 dark:bg-orange-900/20 border-l-4 border-orange-500 p-4 rounded-r-xl shadow-sm">

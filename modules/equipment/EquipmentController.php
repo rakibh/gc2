@@ -86,7 +86,7 @@ class EquipmentController
      */
     public function list(): array
     {
-        $page = (int)($_GET['page'] ?? 1);
+        $page = max(1, (int)($_GET['page'] ?? 1));
         $filters = [
             'type_id' => $_GET['type_id'] ?? null,
             'status' => $_GET['status'] ?? null,
@@ -94,7 +94,7 @@ class EquipmentController
         ];
 
         $settingsRepo = new \Modules\Admin\SettingsRepository();
-        $limit = (int)$settingsRepo->get('records_per_page', 20);
+        $limit = max(1, (int)$settingsRepo->get('records_per_page', 20));
 
         $res = $this->equipmentRepository->getEquipments($filters, $page, $limit);
 
@@ -104,8 +104,9 @@ class EquipmentController
             $data = [
                 'equipments' => $res['items'],
                 'filters' => $filters,
-                'pages' => $res['pages'],
-                'currentPage' => $page
+                'pages' => (int)$res['pages'],
+                'currentPage' => (int)$page,
+                'total' => (int)$res['total']
             ];
             require __DIR__ . '/../../views/equipment/partial_list.php';
             exit;
@@ -116,9 +117,9 @@ class EquipmentController
             'view' => 'views/equipment/list.php',
             'data' => [
                 'equipments' => $res['items'],
-                'total' => $res['total'],
-                'pages' => $res['pages'],
-                'currentPage' => $page,
+                'total' => (int)$res['total'],
+                'pages' => (int)$res['pages'],
+                'currentPage' => (int)$page,
                 'filters' => $filters,
                 'types' => $this->equipmentRepository->getTypes()
             ]
@@ -278,7 +279,9 @@ class EquipmentController
                 $networkData = $data['network'];
             }
 
-            $this->equipmentRepository->saveEquipment($data, $networkData);
+            $savedId = $this->equipmentRepository->saveEquipment($data, $networkData);
+            $eventAction = $id ? 'updated' : 'created';
+            (new \Modules\Admin\AdminRepository())->logEvent('info', 'equipment', "Asset $eventAction: " . ($data['brand'] . ' ' . $data['model']), ['asset_id' => $id ?: $savedId]);
             return ['success' => true, 'message' => 'Equipment saved successfully.'];
         } catch (Exception $e) {
             return ['success' => false, 'message' => $e->getMessage()];
@@ -372,6 +375,7 @@ class EquipmentController
 
         try {
             $this->equipmentRepository->saveType($data);
+            (new \Modules\Admin\AdminRepository())->logEvent('info', 'equipment', 'Equipment type saved: ' . ($data['name'] ?? 'Unknown'));
             return ['success' => true, 'message' => 'Equipment type saved.'];
         } catch (\Throwable $e) {
             $adminRepo->logEvent('error', 'equipment', 'Failed to save equipment type: ' . $e->getMessage(), $data);

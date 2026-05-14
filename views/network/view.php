@@ -1,5 +1,6 @@
 <?php
 /** @var array $data */
+include_once __DIR__ . '/../layouts/audit_helper.php';
 $n = $data['node'];
 ?>
 
@@ -95,6 +96,7 @@ $n = $data['node'];
                         </p>
                     </div>
                 <?php endif; ?>
+
             </div>
         </div>
 

@@ -111,7 +111,8 @@ class NetworkRepository extends Repository
      */
     public function createNetwork(array $data): int
     {
-        $this->db->beginTransaction();
+        $useTransaction = !$this->db->inTransaction();
+        if ($useTransaction) $this->db->beginTransaction();
         try {
             $stmt = $this->db->prepare("
                 INSERT INTO network_info (ip_address, cable_no, patch_panel_no, patch_panel_port, patch_panel_location, switch_no, switch_port, switch_location, remarks)
@@ -132,18 +133,22 @@ class NetworkRepository extends Repository
 
             $networkId = (int)$this->db->lastInsertId();
 
+            $this->logAudit('create', 'network_info', $networkId, null, $data);
+
             if (!empty($data['equipment_id'])) {
                 $this->assignEquipment($networkId, (int)$data['equipment_id']);
             }
 
             // Notify
             $notificationRepo = new \Modules\Notifications\NotificationRepository();
-            $notificationRepo->createGlobal('network', "New network node added: " . $data['ip_address'], 'medium', ['network_id' => $networkId]);
+            $performer = \Core\Session::get('username', 'Someone');
+            $msg = "IP {$data['ip_address']} configured by {$performer}.";
+            $notificationRepo->createGlobal('network', $msg, 'medium', ['network_id' => $networkId]);
 
-            $this->db->commit();
+            if ($useTransaction) $this->db->commit();
             return $networkId;
         } catch (Exception $e) {
-            $this->db->rollBack();
+            if ($useTransaction) $this->db->rollBack();
             throw $e;
         }
     }
@@ -156,7 +161,8 @@ class NetworkRepository extends Repository
         $oldNetwork = $this->getNetworkById($id);
         if (!$oldNetwork) return false;
 
-        $this->db->beginTransaction();
+        $useTransaction = !$this->db->inTransaction();
+        if ($useTransaction) $this->db->beginTransaction();
         try {
             $stmt = $this->db->prepare("
                 UPDATE network_info SET 
@@ -182,24 +188,37 @@ class NetworkRepository extends Repository
                 'remarks' => $data['remarks'] ?? null
             ]);
 
-            // Sync Equipment Mapping
-            $this->db->prepare("DELETE FROM equipment_network_map WHERE network_id = ?")->execute([$id]);
-            if (!empty($data['equipment_id'])) {
-                $this->assignEquipment($id, (int)$data['equipment_id']);
-            } elseif ($oldNetwork['equipment_id']) {
-                // Unassigned
-                $notificationRepo = new \Modules\Notifications\NotificationRepository();
-                $notificationRepo->createGlobal('network', "Equipment unassigned from network node: " . $data['ip_address'], 'medium', ['network_id' => $id]);
+            $this->logAudit('update', 'network_info', $id, $oldNetwork, $data);
+
+            // Sync Equipment Mapping (Only if changed)
+            $newEquipId = !empty($data['equipment_id']) ? (int)$data['equipment_id'] : null;
+            $oldEquipId = !empty($oldNetwork['equipment_id']) ? (int)$oldNetwork['equipment_id'] : null;
+
+            if ($newEquipId !== $oldEquipId) {
+                // Remove existing mapping for this network node
+                $this->db->prepare("DELETE FROM equipment_network_map WHERE network_id = ?")->execute([$id]);
+                
+                if ($newEquipId) {
+                    $this->assignEquipment($id, $newEquipId);
+                } else {
+                    // Unassigned
+                    $notificationRepo = new \Modules\Notifications\NotificationRepository();
+                    $performer = \Core\Session::get('username', 'Someone');
+                    $msg = "IP {$data['ip_address']} unassigned by {$performer}";
+                    $notificationRepo->createGlobal('network', $msg, 'medium', ['network_id' => $id]);
+                }
             }
 
-            // Notify
+            // Notify general update (Always send this for data changes)
             $notificationRepo = new \Modules\Notifications\NotificationRepository();
-            $notificationRepo->createGlobal('network', "Network node updated: " . $data['ip_address'], 'medium', ['network_id' => $id]);
+            $performer = \Core\Session::get('username', 'Someone');
+            $msg = "Network node {$data['ip_address']} updated by {$performer}";
+            $notificationRepo->createGlobal('network', $msg, 'medium', ['network_id' => $id]);
 
-            $this->db->commit();
+            if ($useTransaction) $this->db->commit();
             return true;
         } catch (Exception $e) {
-            $this->db->rollBack();
+            if ($useTransaction) $this->db->rollBack();
             throw $e;
         }
     }
@@ -209,6 +228,15 @@ class NetworkRepository extends Repository
      */
     public function assignEquipment(int $networkId, int $equipmentId): void
     {
+        // Check if already assigned to THIS network node
+        $stmt = $this->db->prepare("SELECT network_id FROM equipment_network_map WHERE equipment_id = ?");
+        $stmt->execute([$equipmentId]);
+        $currentNetworkId = $stmt->fetchColumn();
+
+        if ($currentNetworkId !== false && (int)$currentNetworkId === (int)$networkId) {
+            return; // Already assigned correctly
+        }
+
         // First check if equipment is already assigned elsewhere (PRD: unassigned only)
         $this->db->prepare("DELETE FROM equipment_network_map WHERE equipment_id = ?")->execute([$equipmentId]);
         
@@ -217,9 +245,15 @@ class NetworkRepository extends Repository
 
         // Notify
         $network = $this->db->query("SELECT ip_address FROM network_info WHERE id = $networkId")->fetch();
-        if ($network) {
+        $equipment = $this->db->query("SELECT name, serial_number FROM equipments WHERE id = $equipmentId")->fetch();
+
+        if ($network && $equipment) {
             $notificationRepo = new \Modules\Notifications\NotificationRepository();
-            $notificationRepo->createGlobal('network', "Equipment assigned to network node: " . $network['ip_address'], 'medium', ['network_id' => $networkId, 'equipment_id' => $equipmentId]);
+            $performer = \Core\Session::get('username', 'Someone');
+            $label = $equipment['name'] . (!empty($equipment['serial_number']) ? " ({$equipment['serial_number']})" : "");
+            $msg = "IP {$network['ip_address']} assigned to \"{$label}\" by {$performer}";
+
+            $notificationRepo->createGlobal('network', $msg, 'medium', ['network_id' => $networkId, 'equipment_id' => $equipmentId]);
         }
     }
 
@@ -244,6 +278,8 @@ class NetworkRepository extends Repository
         if ($result) {
             $notificationRepo = new \Modules\Notifications\NotificationRepository();
             $notificationRepo->createGlobal('network', "Network node deleted: " . $network['ip_address'], 'medium');
+            
+            $this->logAudit('delete', 'network_info', $id, $network, null);
         }
 
         return $result;

@@ -6,11 +6,15 @@ $totalPages = $data['pages'] ?? 1;
 ?>
 
 <!-- AJAX Meta Info -->
-<div id="ajax-pagination-meta" class="hidden" 
-     data-pages="<?php echo $totalPages; ?>" 
-     data-current="<?php echo $currentPage; ?>"
-     data-total="<?php echo $data['total']; ?>">
-</div>
+<tr class="hidden">
+    <td colspan="100">
+        <div id="ajax-pagination-meta" 
+             data-pages="<?php echo $totalPages; ?>" 
+             data-current="<?php echo $currentPage; ?>"
+             data-total="<?php echo $data['total']; ?>">
+        </div>
+    </td>
+</tr>
 
 <?php foreach ($users as $user): ?>
     <tr class="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">

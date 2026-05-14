@@ -103,9 +103,11 @@ class NetworkController
 
             if ($id) {
                 $this->networkRepository->updateNetwork($id, $data);
+                (new \Modules\Admin\AdminRepository())->logEvent('info', 'network', "Network node updated: " . $data['ip_address'], ['node_id' => $id]);
                 $msg = 'Network info updated.';
             } else {
-                $this->networkRepository->createNetwork($data);
+                $newId = $this->networkRepository->createNetwork($data);
+                (new \Modules\Admin\AdminRepository())->logEvent('info', 'network', "New network node created: " . $data['ip_address'], ['node_id' => $newId]);
                 $msg = 'Network info created.';
             }
 
@@ -132,6 +134,7 @@ class NetworkController
 
         try {
             $this->networkRepository->deleteNetwork($id);
+            (new \Modules\Admin\AdminRepository())->logEvent('info', 'network', "Network node deleted (ID: $id)");
             return ['success' => true, 'message' => 'Network record deleted.'];
         } catch (Exception $e) {
             return ['success' => false, 'message' => $e->getMessage()];

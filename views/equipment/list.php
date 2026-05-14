@@ -36,7 +36,7 @@ $statusColors = [
             
             <!-- Export Button -->
             <button @click="exportData" 
-                    x-show="filters.type_id || selectedIds.length > 0"
+                    x-show="filters.type_id"
                     class="p-2.5 bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-xl text-slate-500 hover:text-emerald-600 transition-all shadow-sm"
                     title="Export to CSV">
                 <i class="bi bi-download"></i>
@@ -98,12 +98,12 @@ $statusColors = [
     </div>
 
     <!-- Pagination -->
-    <div class="mt-8 bg-white dark:bg-slate-900 rounded-3xl border border-slate-100 dark:border-slate-800 shadow-sm overflow-hidden flex items-center justify-between px-6 py-4 transition-colors" x-show="totalPages > 1">
-        <p class="text-xs text-slate-500 dark:text-slate-400 font-bold uppercase tracking-widest">
-            Showing page <span class="text-blue-600" x-text="currentPage"></span> of <span x-text="totalPages"></span>
+    <div class="mt-8 bg-white dark:bg-slate-900 rounded-3xl border border-slate-100 dark:border-slate-800 shadow-sm overflow-hidden flex items-center justify-between px-6 py-4 transition-colors">
+        <p class="text-xs text-slate-500 dark:text-slate-400">
+            Showing page <span class="font-bold text-slate-800 dark:text-slate-100" x-text="currentPage"></span> of <span class="font-bold text-slate-800 dark:text-slate-100" x-text="totalPages"></span> (<span x-text="totalItems"></span> items)
         </p>
         <div class="flex space-x-1">
-            <template x-for="p in totalPages" :key="p">
+            <template x-for="p in Array.from({length: totalPages}, (v, i) => i + 1)" :key="p">
                 <button @click="goToPage(p)" 
                         class="w-8 h-8 flex items-center justify-center rounded-lg text-xs font-bold transition-all border"
                         :class="p === currentPage ? 'bg-blue-600 text-white shadow-md border-blue-600' : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 border-slate-200 dark:border-slate-700'">
@@ -144,8 +144,9 @@ function equipmentList() {
     return {
         showColumnModal: false,
         filters: <?php echo json_encode($filters); ?>,
-        currentPage: <?php echo $currentPage; ?>,
-        totalPages: <?php echo $totalPages; ?>,
+        currentPage: <?php echo (int)$currentPage; ?>,
+        totalPages: <?php echo (int)$totalPages; ?>,
+        totalItems: <?php echo (int)$data['total']; ?>,
         selectedIds: [],
         allColumns: [
             { id: 'type', label: 'Type/Category', visible: true },
@@ -174,7 +175,7 @@ function equipmentList() {
             return this.allColumns.filter(c => c.visible);
         },
         get allSelected() {
-            return this.selectedIds.length > 0 && document.querySelectorAll('#equipment-table-body tr:not(.text-center)').length === this.selectedIds.length;
+            return this.selectedIds.length > 0 && document.querySelectorAll('#equipment-table-body tr:not(.text-center):not(.hidden)').length === this.selectedIds.length;
         },
         toggleAll() {
             if (this.allSelected) {
@@ -196,6 +197,7 @@ function equipmentList() {
         },
         async applyFilters(page = 1) {
             this.currentPage = page;
+            this.selectedIds = []; // Clear selection when filters change
             const params = new URLSearchParams();
             Object.keys(this.filters).forEach(k => {
                 if (this.filters[k]) params.set(k, this.filters[k]);
@@ -207,13 +209,21 @@ function equipmentList() {
                     headers: { 'X-Requested-With': 'XMLHttpRequest' }
                 });
                 const html = await response.text();
-                document.getElementById('equipment-table-body').innerHTML = html;
+                const container = document.getElementById('equipment-table-body');
+                container.innerHTML = html;
+                
+                // Re-initialize Alpine for new content
+                if (window.Alpine) {
+                    Alpine.process(container);
+                }
                 
                 // Sync pagination state from hidden meta div in the partial
-                const meta = document.getElementById('ajax-pagination-meta');
+                const meta = document.getElementById('equipment-pagination-meta');
                 if (meta) {
-                    this.totalPages = parseInt(meta.getAttribute('data-pages'));
-                    this.currentPage = parseInt(meta.getAttribute('data-current'));
+                    this.totalPages = parseInt(meta.getAttribute('data-pages') || '1');
+                    // Prioritize the page we actually requested to avoid flickering or race conditions
+                    this.currentPage = page; 
+                    this.totalItems = parseInt(meta.getAttribute('data-total') || '0');
                 }
 
                 // Update URL without refresh

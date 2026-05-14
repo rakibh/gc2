@@ -11,87 +11,7 @@
     <!-- Separator for mobile -->
     <div class="h-6 w-px bg-slate-200 dark:bg-slate-800 lg:hidden" aria-hidden="true"></div>
 
-    <div class="flex flex-1 gap-x-4 self-stretch lg:gap-x-6 items-center">
-        <!-- Global Search -->
-        <div class="relative flex flex-1" x-data="{ 
-            query: '', 
-            results: [], 
-            show: false, 
-            loading: false,
-            async performSearch() {
-                if (this.query.length < 2) {
-                    this.results = [];
-                    this.show = false;
-                    return;
-                }
-                this.loading = true;
-                this.show = true;
-                try {
-                    const response = await fetch(`index.php?route=global_search&q=${encodeURIComponent(this.query)}`);
-                    const data = await response.json();
-                    if (data.success) {
-                        this.results = data.results;
-                    }
-                } catch (e) {
-                    console.error('Search failed', e);
-                } finally {
-                    this.loading = false;
-                }
-            }
-        }" @click.away="show = false">
-            <i class="bi bi-search absolute inset-y-0 left-0 flex items-center pl-3 text-slate-400 pointer-events-none"></i>
-            <input class="block h-full w-full border-0 py-0 pl-10 pr-0 text-slate-900 dark:text-slate-100 placeholder:text-slate-400 focus:ring-0 sm:text-sm bg-transparent outline-none" 
-                   placeholder="<?php echo \Core\I18n::t('search_system'); ?>" 
-                   type="search"
-                   x-model="query"
-                   @input.debounce.500ms="performSearch()"
-                   @focus="if(results.length > 0) show = true">
-
-            <!-- Search Results Dropdown -->
-            <div x-show="show" x-cloak
-                 class="absolute left-0 top-full mt-2 w-full max-w-xl bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-100 dark:border-slate-800 overflow-hidden z-[100]"
-                 x-transition:enter="transition ease-out duration-200"
-                 x-transition:enter-start="opacity-0 translate-y-1"
-                 x-transition:enter-end="opacity-100 translate-y-0">
-                
-                <div class="p-2 max-h-[70vh] overflow-y-auto custom-scrollbar">
-                    <template x-if="loading">
-                        <div class="p-8 text-center">
-                            <i class="bi bi-arrow-repeat animate-spin text-2xl text-blue-600"></i>
-                            <p class="text-xs text-slate-400 mt-2 font-bold uppercase tracking-widest">Searching System...</p>
-                        </div>
-                    </template>
-
-                    <template x-if="!loading && results.length === 0">
-                        <div class="p-8 text-center">
-                            <i class="bi bi-search text-2xl text-slate-200 mb-2"></i>
-                            <p class="text-xs text-slate-400 italic">No matches found for "<span x-text="query"></span>"</p>
-                        </div>
-                    </template>
-
-                    <template x-for="res in results" :key="res.type + '-' + res.id">
-                        <a :href="res.url" class="flex items-center gap-4 p-4 hover:bg-slate-50 dark:hover:bg-slate-800 rounded-xl transition-colors group">
-                            <div class="w-10 h-10 rounded-xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-400 group-hover:text-blue-600 transition-colors">
-                                <i class="bi" :class="res.icon"></i>
-                            </div>
-                            <div class="flex-1 min-w-0">
-                                <p class="text-sm font-bold text-slate-800 dark:text-slate-100 truncate" x-text="res.title"></p>
-                                <div class="flex items-center gap-2 mt-0.5">
-                                    <span class="text-[9px] font-black uppercase tracking-widest px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-500" x-text="res.type"></span>
-                                    <span class="text-[10px] text-slate-400 truncate" x-text="res.subtitle"></span>
-                                </div>
-                            </div>
-                            <i class="bi bi-chevron-right text-slate-300 group-hover:text-blue-600 transition-colors"></i>
-                        </a>
-                    </template>
-                </div>
-                
-                <div x-show="results.length > 0" class="px-6 py-3 bg-slate-50 dark:bg-slate-800/50 border-t border-slate-100 dark:border-slate-800 text-[10px] text-slate-400 font-bold uppercase tracking-widest">
-                    Showing top results for <span class="text-blue-600" x-text="'\'' + query + '\''"></span>
-                </div>
-            </div>
-        </div>
-
+    <div class="flex flex-1 gap-x-4 self-stretch lg:gap-x-6 items-center justify-end">
         <div class="flex items-center gap-x-4 lg:gap-x-6">
             <!-- Digital Clock -->
             <div x-data="{ 
@@ -154,17 +74,20 @@
                                         'bg-red-100 text-red-600': n.priority === 'urgent'
                                     }">
                                         <i class="bi" :class="{
-                                            'bi-list-check': n.type === 'task',
+                                            'bi-list-check': n.type === 'task' || n.type.includes('task'),
+                                            'bi-exclamation-octagon': n.type === 'task_overdue',
+                                            'bi-clock-history': n.type === 'task_approaching',
                                             'bi-pc-display': n.type === 'equipment',
                                             'bi-diagram-3': n.type === 'network',
                                             'bi-people': n.type === 'user',
                                             'bi-shield-check': n.type === 'warranty',
-                                            'bi-bell': !['task', 'equipment', 'network', 'user', 'warranty'].includes(n.type)
+                                            'bi-exclamation-triangle-fill': n.priority === 'urgent',
+                                            'bi-bell': !['task', 'task_overdue', 'task_approaching', 'equipment', 'network', 'user', 'warranty'].includes(n.type) && n.priority !== 'urgent'
                                         }"></i>
                                     </div>
                                     <div class="flex-1 min-w-0">
                                         <p class="text-xs font-bold text-slate-800 dark:text-slate-100 line-clamp-2" x-text="n.message"></p>
-                                        <div class="flex flex-col mt-1 gap-0.5">
+                                        <div class="flex items-center justify-between mt-1">
                                             <p class="text-[10px] text-slate-400" x-text="$store.app.timeAgo(n.created_at)"></p>
                                             <template x-if="n.read_at">
                                                 <p class="text-[9px] text-slate-400 italic" x-text="'Read ' + $store.app.timeAgo(n.read_at)"></p>

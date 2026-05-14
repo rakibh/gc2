@@ -70,12 +70,12 @@ function sortUrl($field, $currentSortBy, $currentSortDir) {
         </div>
 
         <!-- Pagination -->
-        <div class="px-6 py-4 bg-slate-50/50 dark:bg-slate-800/50 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between" id="pagination-container" x-show="totalPages > 1">
-            <p class="text-xs text-slate-500 dark:text-slate-400 font-bold uppercase tracking-widest">
-                Showing page <span class="text-blue-600" x-text="currentPage"></span> of <span x-text="totalPages"></span> (<span x-text="totalItems"></span> total users)
+        <div class="px-6 py-4 bg-slate-50/50 dark:bg-slate-800/50 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between" id="pagination-container">
+            <p class="text-xs text-slate-500 dark:text-slate-400">
+                Showing page <span class="font-bold text-slate-800 dark:text-slate-100" x-text="currentPage"></span> of <span class="font-bold text-slate-800 dark:text-slate-100" x-text="totalPages"></span> (<span x-text="totalItems"></span> total users)
             </p>
             <div class="flex space-x-1">
-                <template x-for="p in totalPages" :key="p">
+                <template x-for="p in Array.from({length: totalPages}, (v, i) => i + 1)" :key="p">
                     <button @click="goToPage(p)" 
                             class="w-8 h-8 flex items-center justify-center rounded-lg text-xs font-bold transition-all border"
                             :class="p === currentPage ? 'bg-blue-600 text-white shadow-md border-blue-600' : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 border-slate-200 dark:border-slate-700'">
@@ -197,55 +197,6 @@ function sortUrl($field, $currentSortBy, $currentSortDir) {
                             <p class="text-[10px] font-bold text-slate-400 uppercase mb-1">Email Address</p>
                             <p class="text-sm font-semibold text-slate-800 dark:text-slate-100" x-text="formData.email || 'N/A'"></p>
                         </div>
-                        <div>
-                            <p class="text-[10px] font-bold text-slate-400 uppercase mb-1">Phone Number</p>
-                            <p class="text-sm font-semibold text-slate-800 dark:text-slate-100" x-text="formData.phone || 'N/A'"></p>
-                        </div>
-                    </div>
-
-                    <!-- Revision History -->
-                    <div class="mt-8 border-t border-slate-100 dark:border-slate-800 pt-8">
-                        <div class="flex items-center justify-between mb-6">
-                            <h5 class="text-sm font-bold text-slate-900 dark:text-slate-100 flex items-center">
-                                <i class="bi bi-clock-history mr-2 text-blue-600"></i> Revision History
-                            </h5>
-                            <span class="text-[10px] text-slate-400 font-bold uppercase">Last 15 Revisions</span>
-                        </div>
-
-                        <div class="flow-root overflow-y-auto max-h-64 pr-2 custom-scrollbar">
-                            <ul role="list" class="-mb-8">
-                                <template x-for="(rev, index) in revisions" :key="rev.id">
-                                    <li>
-                                        <div class="relative pb-8">
-                                            <span x-show="index !== revisions.length - 1" class="absolute left-4 top-4 -ml-px h-full w-0.5 bg-slate-200 dark:bg-slate-800" aria-hidden="true"></span>
-                                            <div class="relative flex space-x-3">
-                                                <div>
-                                                    <span class="h-8 w-8 rounded-full flex items-center justify-center ring-8 ring-white dark:ring-slate-900"
-                                                        :class="rev.action === 'create' ? 'bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400' : 'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400'">
-                                                        <i class="bi" :class="rev.action === 'create' ? 'bi-plus-lg' : 'bi-pencil-fill text-[10px]'"></i>
-                                                    </span>
-                                                </div>
-                                                <div class="flex min-w-0 flex-1 justify-between space-x-4 pt-1.5">
-                                                    <div>
-                                                        <p class="text-sm text-slate-500 dark:text-slate-400">
-                                                            <span class="font-bold text-slate-900 dark:text-slate-100" x-text="rev.action === 'create' ? 'User created' : 'Profile updated'"></span>
-                                                            by <span class="font-medium text-slate-700 dark:text-slate-300" x-text="rev.responsible_user"></span>
-                                                        </p>
-                                                        <div x-show="rev.action === 'update' && rev.new_values" class="mt-1 text-xs text-slate-400 italic">
-                                                            <template x-for="(val, key) in JSON.parse(rev.new_values)" :key="key">
-                                                                <span class="mr-2" x-text="key + ': ' + (val === null ? 'N/A' : val)"></span>
-                                                            </template>
-                                                        </div>
-                                                    </div>
-                                                    <div class="whitespace-nowrap text-right text-xs text-slate-400">
-                                                        <time x-text="formatDate(rev.created_at)"></time>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </li>
-                                </template>
-                            </ul>
                         </div>
                     </div>
                 </div>
@@ -315,11 +266,6 @@ function userManagement() {
             this.revisions = [];
             if (user) {
                 this.formData = { ...this.formData, ...user, user_id: user.id, password: '', csrf_token: '<?php echo $_SESSION['csrf_token']; ?>' };
-                if (mode === 'view') {
-                    const response = await fetch('index.php?route=user_revision_history&id=' + user.id);
-                    const result = await response.json();
-                    if (result.success) this.revisions = result.revisions;
-                }
             } else {
                 this.formData = {
                     user_id: '', username: '', employee_id: '', password: '',
@@ -430,7 +376,13 @@ function userManagement() {
                     headers: { 'X-Requested-With': 'XMLHttpRequest' }
                 });
                 const html = await response.text();
-                document.getElementById('user-table-body').innerHTML = html;
+                const container = document.getElementById('user-table-body');
+                container.innerHTML = html;
+
+                // Re-initialize Alpine for new content
+                if (window.Alpine) {
+                    Alpine.process(container);
+                }
                 
                 // Update URL without refresh
                 const newUrl = window.location.pathname + '?' + params.toString();

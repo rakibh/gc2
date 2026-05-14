@@ -107,7 +107,8 @@ try {
         case 'delete_user':
             if (!Session::get('user_id')) { header('Location: index.php?route=login'); exit; }
             $id = (int)($_GET['id'] ?? 0);
-            (new UserRepository())->deleteUser($id);
+            (new \Modules\Auth\UserRepository())->deleteUser($id);
+            (new \Modules\Admin\AdminRepository())->logEvent('info', 'user', "User deleted (ID: $id)");
             header('Location: index.php?route=list_users');
             break;
 
@@ -257,12 +258,14 @@ try {
             break;
 
         case 'equipment_delete':
+            if (!Session::get('user_id')) { header('Content-Type: application/json'); echo json_encode(['success' => false, 'message' => 'Unauthorized']); exit; }
             header('Content-Type: application/json');
             $id = (int)($_GET['id'] ?? 0);
             echo json_encode((new EquipmentController())->delete($id));
             break;
 
         case 'equipment_bulk_delete':
+            if (!Session::get('user_id')) { header('Content-Type: application/json'); echo json_encode(['success' => false, 'message' => 'Unauthorized']); exit; }
             header('Content-Type: application/json');
             $data = json_decode(file_get_contents('php://input'), true);
             echo json_encode((new EquipmentController())->bulkDelete($data ?? []));
@@ -342,6 +345,11 @@ try {
         case 'admin_clear_logs':
             header('Content-Type: application/json');
             echo json_encode((new AdminController())->clearLogs());
+            break;
+
+        case 'admin_log_detail':
+            header('Content-Type: application/json');
+            echo json_encode((new AdminController())->logDetail());
             break;
 
         case 'admin_optimize_db':

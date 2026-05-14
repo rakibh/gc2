@@ -33,30 +33,22 @@ class AdminRepository extends Repository
 
         if (!empty($filters['level'])) {
             $query .= " AND l.level = :level";
-            $params['level'] = $filters['level'];
+            $params[':level'] = $filters['level'];
         }
 
         if (!empty($filters['category'])) {
             $query .= " AND l.category = :category";
-            $params['category'] = $filters['category'];
+            $params[':category'] = $filters['category'];
         }
 
         if (!empty($filters['date_from'])) {
             $query .= " AND l.timestamp >= :date_from";
-            $params['date_from'] = $filters['date_from'] . ' 00:00:00';
+            $params[':date_from'] = $filters['date_from'] . ' 00:00:00';
         }
 
         if (!empty($filters['date_to'])) {
             $query .= " AND l.timestamp <= :date_to";
-            $params['date_to'] = $filters['date_to'] . ' 23:59:59';
-        }
-
-        if (!empty($filters['search'])) {
-            $query .= " AND (l.message LIKE :s1 OR l.ip_address LIKE :s2 OR l.user_agent LIKE :s3 OR u.username LIKE :s4)";
-            $params['s1'] = '%' . $filters['search'] . '%';
-            $params['s2'] = '%' . $filters['search'] . '%';
-            $params['s3'] = '%' . $filters['search'] . '%';
-            $params['s4'] = '%' . $filters['search'] . '%';
+            $params[':date_to'] = $filters['date_to'] . ' 23:59:59';
         }
 
         $query .= " ORDER BY l.timestamp DESC LIMIT :limit OFFSET :offset";
@@ -78,7 +70,6 @@ class AdminRepository extends Repository
         if (!empty($filters['category'])) $filterPart .= " AND l.category = :category";
         if (!empty($filters['date_from'])) $filterPart .= " AND l.timestamp >= :date_from";
         if (!empty($filters['date_to'])) $filterPart .= " AND l.timestamp <= :date_to";
-        if (!empty($filters['search'])) $filterPart .= " AND (l.message LIKE :s1 OR l.ip_address LIKE :s2 OR l.user_agent LIKE :s3 OR u.username LIKE :s4)";
 
         $countStmt = $this->db->prepare($countQuery . $filterPart);
         foreach ($params as $key => $val) {
@@ -117,15 +108,14 @@ class AdminRepository extends Repository
                 INSERT INTO system_logs (level, category, user_id, ip_address, user_agent, message, context)
                 VALUES (?, ?, ?, ?, ?, ?, ?)
             ");
-            $stmt->execute([
-                $level,
-                $category,
-                $userId,
-                $ip,
-                $ua,
-                $message,
-                $context ? json_encode($context) : null
-            ]);
+            $stmt->bindValue(1, $level);
+            $stmt->bindValue(2, $category);
+            $stmt->bindValue(3, $userId, $userId === null ? PDO::PARAM_NULL : PDO::PARAM_INT);
+            $stmt->bindValue(4, $ip);
+            $stmt->bindValue(5, $ua);
+            $stmt->bindValue(6, $message);
+            $stmt->bindValue(7, $context ? json_encode($context) : null, $context === null ? PDO::PARAM_NULL : PDO::PARAM_STR);
+            $stmt->execute();
         } catch (Exception $e) {
             error_log("Logging Error: " . $e->getMessage());
         }

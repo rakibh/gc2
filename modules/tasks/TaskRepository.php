@@ -114,9 +114,9 @@ class TaskRepository extends Repository
     {
         // 1. Handle Overdue (Tasks that just passed their deadline)
         $stmt = $this->db->prepare("
-            SELECT id, title, priority, status 
+            SELECT id, title, priority, status, deadline 
             FROM tasks 
-            WHERE status IN ('todo', 'doing') 
+            WHERE status = 'todo' 
             AND deadline IS NOT NULL 
             AND deadline < NOW()
         ");
@@ -133,15 +133,22 @@ class TaskRepository extends Repository
             $assigneeIds = $assigneesStmt->fetchAll(PDO::FETCH_COLUMN);
             
             if (!empty($assigneeIds)) {
+                $deadline = new \DateTime($task['deadline']);
+                $now = new \DateTime();
+                $diff = $now->diff($deadline);
+                $hours = ($diff->days * 24) + $diff->h;
+                $priority = ucfirst($task['priority']);
+                $msg = "Task \"{$task['title']}\" is {$hours}h overdue. Priority: {$priority}";
+
                 $notificationRepo->createForUsers(
                     $assigneeIds,
                     'task_overdue',
-                    "TASK OVERDUE: " . $task['title'],
+                    $msg,
                     'high',
                     ['task_id' => $task['id']]
                 );
             }
-            $this->logTaskActivity((int)$task['id'], 'status_change', $task['status'], 'past_due');
+            $this->logAudit('update_status', 'tasks', (int)$task['id'], ['status' => $task['status']], ['status' => 'past_due']);
         }
 
         // 2. Handle Approaching (Deadline within next 24 hours)
@@ -231,7 +238,8 @@ class TaskRepository extends Repository
      */
     public function createTask(array $data, array $assignees): int
     {
-        $this->db->beginTransaction();
+        $useTransaction = !$this->db->inTransaction();
+        if ($useTransaction) $this->db->beginTransaction();
         try {
             $stmt = $this->db->prepare("
                 INSERT INTO tasks (title, description, status, priority, recurrence, recurrence_metadata, deadline, creator_id)
@@ -260,24 +268,28 @@ class TaskRepository extends Repository
             }
 
             // Log activity
-            $this->logTaskActivity($taskId, 'create', null, $data['title']);
+            $this->logAudit('create', 'tasks', $taskId, null, $data);
 
             // Notify Assignees
             if (!empty($assignees)) {
                 $notificationRepo = new \Modules\Notifications\NotificationRepository();
+                $performer = \Core\Session::get('username', 'Someone');
+                $dueDate = $data['deadline'] ? date('d/m/Y', strtotime($data['deadline'])) : 'No deadline';
+                $msg = "Task \"{$data['title']}\" assigned to you by {$performer}. Due: {$dueDate}";
+                
                 $notificationRepo->createForUsers(
                     $assignees,
                     'task',
-                    "You have been assigned to a new task: " . $data['title'],
+                    $msg,
                     $data['priority'],
                     ['task_id' => $taskId]
                 );
             }
 
-            $this->db->commit();
+            if ($useTransaction) $this->db->commit();
             return $taskId;
         } catch (Exception $e) {
-            $this->db->rollBack();
+            if ($useTransaction) $this->db->rollBack();
             throw $e;
         }
     }
@@ -295,23 +307,35 @@ class TaskRepository extends Repository
             throw new Exception('Task must be in "Doing" status before it can be marked as "Done".');
         }
 
-        $this->db->beginTransaction();
+        $useTransaction = !$this->db->inTransaction();
+        if ($useTransaction) $this->db->beginTransaction();
         try {
             $stmt = $this->db->prepare("UPDATE tasks SET status = ? WHERE id = ?");
             $result = $stmt->execute([$newStatus, $taskId]);
             
             $recurrenceCreated = false;
             if ($result) {
-                $this->logTaskActivity($taskId, 'status_change', $task['status'], $newStatus);
+                $this->logAudit('update_status', 'tasks', $taskId, ['status' => $task['status']], ['status' => $newStatus]);
                 
-                // Notify Assignees of status change
-                $assigneeIds = array_column($task['assignees'], 'id');
-                if (!empty($assigneeIds)) {
+                // Notify involved parties (Creator + Assignees)
+                $involvedIds = array_column($task['assignees'], 'id');
+                $involvedIds[] = $task['creator_id'];
+                $involvedIds = array_unique(array_map('intval', $involvedIds));
+                
+                // Remove the performer from the list to avoid self-notification
+                $performerId = (int)\Core\Session::get('user_id');
+                $notifyIds = array_filter($involvedIds, fn($id) => $id !== $performerId);
+
+                if (!empty($notifyIds)) {
                     $notificationRepo = new \Modules\Notifications\NotificationRepository();
+                    $performer = \Core\Session::get('username', 'Someone');
+                    $statusName = ucfirst(str_replace('_', ' ', $newStatus));
+                    $msg = "Task \"{$task['title']}\" status changed to {$statusName} by {$performer}";
+                    
                     $notificationRepo->createForUsers(
-                        $assigneeIds,
+                        array_values($notifyIds),
                         'task',
-                        "Task status updated to " . ucfirst(str_replace('_', ' ', $newStatus)) . ": " . $task['title'],
+                        $msg,
                         $task['priority'],
                         ['task_id' => $taskId]
                     );
@@ -324,14 +348,14 @@ class TaskRepository extends Repository
                 }
             }
             
-            $this->db->commit();
+            if ($useTransaction) $this->db->commit();
             return [
                 'success' => $result,
                 'recurrence' => $recurrenceCreated,
                 'message' => $recurrenceCreated ? 'Task completed! New recurring task has been created.' : 'Task status updated.'
             ];
         } catch (Exception $e) {
-            $this->db->rollBack();
+            if ($useTransaction) $this->db->rollBack();
             throw $e;
         }
     }
@@ -393,7 +417,7 @@ class TaskRepository extends Repository
             }
         }
 
-        $this->logTaskActivity($newTaskId, 'create', null, '[Auto-Generated] ' . $task['title']);
+        $this->logAudit('create', 'tasks', $newTaskId, null, ['title' => '[Auto-Generated] ' . $task['title']]);
     }
 
     /**
@@ -404,7 +428,8 @@ class TaskRepository extends Repository
         $oldTask = $this->getTaskById($id);
         if (!$oldTask) return false;
 
-        $this->db->beginTransaction();
+        $useTransaction = !$this->db->inTransaction();
+        if ($useTransaction) $this->db->beginTransaction();
         try {
             $stmt = $this->db->prepare("
                 UPDATE tasks SET 
@@ -441,22 +466,33 @@ class TaskRepository extends Repository
             // 1. Notify newly added assignees
             $newAssigneeIds = array_diff($assignees, $oldAssigneeIds);
             if (!empty($newAssigneeIds)) {
+                $performer = \Core\Session::get('username', 'Someone');
+                $dueDate = $data['deadline'] ? date('d/m/Y', strtotime($data['deadline'])) : 'No deadline';
+                $msg = "Task \"{$data['title']}\" assigned to you by {$performer}. Due: {$dueDate}";
+
                 $notificationRepo->createForUsers(
                     $newAssigneeIds,
                     'task',
-                    "You have been assigned to an existing task: " . $data['title'],
+                    $msg,
                     $data['priority'],
                     ['task_id' => $id]
                 );
             }
 
-            // 2. Notify all current assignees if title or description changed
+            // 2. Notify involved parties if title or description changed
             if ($oldTask['title'] !== $data['title'] || $oldTask['description'] !== $data['description']) {
-                if (!empty($assignees)) {
+                $involvedIds = array_unique(array_merge($assignees, [(int)$oldTask['creator_id']]));
+                $performerId = (int)\Core\Session::get('user_id');
+                $notifyIds = array_filter($involvedIds, fn($uid) => (int)$uid !== $performerId);
+
+                if (!empty($notifyIds)) {
+                    $performer = \Core\Session::get('username', 'Someone');
+                    $msg = "Task \"{$data['title']}\" details updated by {$performer}";
+
                     $notificationRepo->createForUsers(
-                        $assignees,
+                        array_values($notifyIds),
                         'task',
-                        "Task details updated: " . $data['title'],
+                        $msg,
                         $data['priority'],
                         ['task_id' => $id]
                     );
@@ -465,13 +501,14 @@ class TaskRepository extends Repository
 
             // Log activity if status changed
             if ($oldTask['status'] !== $data['status']) {
-                $this->logTaskActivity($id, 'status_change', $oldTask['status'], $data['status']);
+                $this->logAudit('update_status', 'tasks', $id, ['status' => $oldTask['status']], ['status' => $data['status']]);
             }
+            $this->logAudit('update', 'tasks', $id, $oldTask, $data);
 
-            $this->db->commit();
+            if ($useTransaction) $this->db->commit();
             return true;
         } catch (Exception $e) {
-            $this->db->rollBack();
+            if ($useTransaction) $this->db->rollBack();
             throw $e;
         }
     }
@@ -489,31 +526,17 @@ class TaskRepository extends Repository
     }
 
     /**
-     * Log task-specific actions.
-     */
-    public function logTaskActivity(int $taskId, string $action, ?string $old, ?string $new): void
-    {
-        $stmt = $this->db->prepare("
-            INSERT INTO audit_logs (user_id, action, target_table, target_id, old_values, new_values)
-            VALUES (:user_id, :action, 'tasks', :task_id, :old, :new)
-        ");
-        
-        $stmt->execute([
-            'user_id' => \Core\Session::get('user_id'),
-            'action' => $action,
-            'task_id' => $taskId,
-            'old' => $old ? json_encode(['value' => $old]) : null,
-            'new' => $new ? json_encode(['value' => $new]) : null
-        ]);
-    }
-
-    /**
      * Delete a task.
      */
     public function deleteTask(int $id): bool
     {
+        $task = $this->getTaskById($id);
         $stmt = $this->db->prepare("DELETE FROM tasks WHERE id = ?");
-        return $stmt->execute([$id]);
+        $result = $stmt->execute([$id]);
+        if ($result && $task) {
+            $this->logAudit('delete', 'tasks', $id, $task, null);
+        }
+        return $result;
     }
 
     /**
@@ -553,10 +576,13 @@ class TaskRepository extends Repository
             
             if (!empty($notifyIds)) {
                 $notificationRepo = new \Modules\Notifications\NotificationRepository();
+                $performer = \Core\Session::get('username', 'Someone');
+                $msg = "New comment on task \"{$task['title']}\" by {$performer}";
+                
                 $notificationRepo->createForUsers(
                     $notifyIds,
                     'task',
-                    "New comment on task: " . $task['title'],
+                    $msg,
                     $task['priority'],
                     ['task_id' => $taskId]
                 );

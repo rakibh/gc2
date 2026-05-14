@@ -105,12 +105,14 @@ class EquipmentRepository extends Repository
             $equipments = $stmt->fetchAll();
             
             foreach ($equipments as $e) {
-                $msg = "WARRANTY ALERT: Equipment \"{$e['name']}\" (" . ($e['serial_number'] ?: 'No S/N') . ") ";
+                $label = $e['name'] . (!empty($e['serial_number']) ? " ({$e['serial_number']})" : "");
+                $expiryDate = date('d/m/Y', strtotime($e['warranty_expiry']));
+
                 if ($days === 0) {
-                    $msg .= "warranty expires TODAY!";
+                    $msg = "Warranty for \"{$label}\" expired on {$expiryDate}";
                     $priority = 'urgent';
                 } else {
-                    $msg .= "warranty expires in $days days.";
+                    $msg = "Warranty for \"{$label}\" expires in {$days} days ({$expiryDate})";
                     $priority = $days <= 15 ? 'high' : 'medium';
                 }
                 
@@ -170,6 +172,9 @@ class EquipmentRepository extends Repository
             $params['s9'] = '%' . $filters['search'] . '%';
         }
 
+        $limitInt = (int)$limit;
+        $offsetInt = (int)max(0, $offset);
+
         $query = "
             SELECT e.*, et.name as type_name, 
             n.ip_address
@@ -179,15 +184,13 @@ class EquipmentRepository extends Repository
             LEFT JOIN network_info n ON enm.network_id = n.id
             $where
             ORDER BY e.created_at DESC 
-            LIMIT :limit OFFSET :offset
+            LIMIT $limitInt OFFSET $offsetInt
         ";
 
         $stmt = $this->db->prepare($query);
         foreach ($params as $key => $val) {
             $stmt->bindValue($key, $val);
         }
-        $stmt->bindValue(':limit', (int)$limit, PDO::PARAM_INT);
-        $stmt->bindValue(':offset', (int)max(0, $offset), PDO::PARAM_INT);
         $stmt->execute();
         $items = $stmt->fetchAll();
 
@@ -261,7 +264,8 @@ class EquipmentRepository extends Repository
      */
     public function saveEquipment(array $data, ?array $networkData = null): int
     {
-        $this->db->beginTransaction();
+        $useTransaction = !$this->db->inTransaction();
+        if ($useTransaction) $this->db->beginTransaction();
         try {
             $id = !empty($data['id']) ? (int)$data['id'] : null;
 
@@ -318,28 +322,59 @@ class EquipmentRepository extends Repository
 
             $stmt->execute($params);
 
+            // Notifications
+            $notificationRepo = new \Modules\Notifications\NotificationRepository();
+            $performer = \Core\Session::get('username', 'Someone');
+            $label = $data['name'] . (!empty($data['serial_number']) ? " ({$data['serial_number']})" : "");
+
             if (!$id) {
                 $id = (int)$this->db->lastInsertId();
-                $isNew = true;
+                $this->logAudit('create', 'equipments', $id, null, $data);
+                
+                // Get type name for the message
+                $typeStmt = $this->db->prepare("SELECT name FROM equipment_types WHERE id = ?");
+                $typeStmt->execute([$data['type_id']]);
+                $typeName = $typeStmt->fetchColumn() ?: 'Equipment';
+                $msg = "New {$typeName} \"{$label}\" added by {$performer}";
             } else {
-                $isNew = false;
+                $oldEquipment = $this->getEquipmentById($id);
+                $this->logAudit('update', 'equipments', $id, $oldEquipment, $data);
+                
+                if (isset($data['status']) && $oldEquipment['status'] !== $data['status']) {
+                    $status = $data['status'];
+                    $msg = "Equipment \"{$label}\" status changed to {$status} by {$performer}";
+                } elseif (isset($data['assigned_to']) && $oldEquipment['assigned_to'] !== $data['assigned_to']) {
+                    $person = $data['assigned_to'] ?: 'Unassigned';
+                    $msg = "Equipment \"{$label}\" assigned to {$person} by {$performer}";
+                } else {
+                    $msg = "Equipment \"{$label}\" updated by {$performer}";
+                }
             }
+
+            $notificationRepo->createGlobal('equipment', $msg, 'medium', ['equipment_id' => $id]);
 
             // Handle Network Info linking
             if ($networkData && !empty($networkData['ip_address'])) {
-                // ... (existing network handling)
+                $networkRepo = new \Modules\Network\NetworkRepository();
+                // Check if IP already exists
+                $stmt = $this->db->prepare("SELECT id FROM network_info WHERE ip_address = ?");
+                $stmt->execute([$networkData['ip_address']]);
+                $networkId = $stmt->fetchColumn();
+
+                if (!$networkId) {
+                    $networkId = $networkRepo->createNetwork($networkData);
+                } else {
+                    $networkRepo->updateNetwork((int)$networkId, $networkData);
+                }
+
+                // Assign this equipment to the network node
+                $networkRepo->assignEquipment((int)$networkId, $id);
             }
 
-            // Notify
-            $notificationRepo = new \Modules\Notifications\NotificationRepository();
-            $msg = $isNew ? "New equipment added: " : "Equipment updated: ";
-            $msg .= $data['name'] . (!empty($data['serial_number']) ? " (" . $data['serial_number'] . ")" : "");
-            $notificationRepo->createGlobal('equipment', $msg, 'medium', ['equipment_id' => $id]);
-
-            $this->db->commit();
+            if ($useTransaction) $this->db->commit();
             return $id;
         } catch (Exception $e) {
-            $this->db->rollBack();
+            if ($useTransaction) $this->db->rollBack();
             throw $e;
         }
     }
@@ -357,6 +392,8 @@ class EquipmentRepository extends Repository
             $notificationRepo = new \Modules\Notifications\NotificationRepository();
             $msg = "Equipment deleted: " . $equipment['name'] . (!empty($equipment['serial_number']) ? " (" . $equipment['serial_number'] . ")" : "");
             $notificationRepo->createGlobal('equipment', $msg, 'medium');
+            
+            $this->logAudit('delete', 'equipments', $id, $equipment, null);
         }
 
         return $result;
@@ -369,6 +406,14 @@ class EquipmentRepository extends Repository
     {
         if (empty($ids)) return 0;
         
+        // Log before deletion
+        foreach ($ids as $id) {
+            $equipment = $this->getEquipmentById((int)$id);
+            if ($equipment) {
+                $this->logAudit('delete', 'equipments', (int)$id, $equipment, null);
+            }
+        }
+
         $placeholders = implode(',', array_fill(0, count($ids), '?'));
         $stmt = $this->db->prepare("DELETE FROM equipments WHERE id IN ($placeholders)");
         $stmt->execute($ids);

@@ -1,5 +1,6 @@
 <?php
 /** @var array $data */
+include_once __DIR__ . '/../layouts/audit_helper.php';
 $task = $data['task'];
 $logs = $data['logs'];
 $comments = (new \Modules\Tasks\TaskRepository())->getComments($task['id']);
@@ -18,6 +19,30 @@ $priorityColors = [
     'high' => 'bg-orange-100 text-orange-600',
     'urgent' => 'bg-red-100 text-red-600',
 ];
+
+/**
+ * Simplified helper for Task Activity Log (replaces revision details)
+ */
+function renderTaskActivity(array $log): string {
+    $user = htmlspecialchars($log['responsible_user'] ?? 'System');
+    $action = $log['action'];
+    
+    if ($action === 'create') return "<strong>{$user}</strong> created the task";
+    if ($action === 'delete') return "<strong>{$user}</strong> deleted the task";
+    
+    if ($action === 'update_status') {
+        $new = $log['new_values'] ? json_decode($log['new_values'], true) : null;
+        $status = $new['status'] ?? 'unknown';
+        $statusLabel = ucwords(str_replace('_', ' ', $status));
+        return "<strong>{$user}</strong> changed status to <span class=\"font-bold text-slate-700 dark:text-slate-300\">{$statusLabel}</span>";
+    }
+
+    if ($action === 'update') {
+        return "<strong>{$user}</strong> updated task details";
+    }
+    
+    return "<strong>{$user}</strong> performed an action";
+}
 ?>
 
 <div class="max-w-5xl mx-auto space-y-8" x-data="taskView(<?php echo htmlspecialchars(json_encode($comments)); ?>)">
@@ -208,9 +233,12 @@ $priorityColors = [
                 </div>
             </div>
 
-            <!-- Activity Log Feed -->
+            <!-- Task Activity Log -->
             <div class="bg-white dark:bg-slate-900 rounded-3xl border border-slate-100 dark:border-slate-800 shadow-sm p-8 transition-colors">
-                <h3 class="text-xs font-black text-slate-400 uppercase tracking-[0.2em] mb-6">Activity Log</h3>
+                <div class="flex items-center justify-between mb-6">
+                    <h3 class="text-xs font-black text-slate-400 uppercase tracking-[0.2em]">Task Activity Log</h3>
+                    <i class="bi bi-clock-history text-slate-400"></i>
+                </div>
                 <div class="flow-root overflow-y-auto max-h-[400px] pr-2 custom-scrollbar">
                     <ul role="list" class="-mb-8">
                         <?php foreach($logs as $index => $log): ?>
@@ -222,21 +250,22 @@ $priorityColors = [
                                     <div class="relative flex space-x-3">
                                         <div>
                                             <span class="h-8 w-8 rounded-full bg-slate-50 dark:bg-slate-800 border border-slate-100 dark:border-slate-700 flex items-center justify-center ring-8 ring-white dark:ring-slate-900">
-                                                <i class="bi <?php echo $log['action'] === 'create' ? 'bi-plus-circle-fill text-green-500' : 'bi-pencil-fill text-blue-500'; ?> text-[10px]"></i>
+                                                <i class="bi <?php 
+                                                    if ($log['action'] === 'create') echo 'bi-plus-circle-fill text-green-500';
+                                                    elseif ($log['action'] === 'update_status') echo 'bi-arrow-repeat text-orange-500';
+                                                    elseif ($log['action'] === 'delete') echo 'bi-trash-fill text-red-500';
+                                                    else echo 'bi-pencil-fill text-blue-500';
+                                                ?> text-[10px]"></i>
                                             </span>
                                         </div>
                                         <div class="flex min-w-0 flex-1 justify-between space-x-4 pt-1.5">
-                                            <div>
-                                                <p class="text-xs font-medium text-slate-500 dark:text-slate-400">
-                                                    <span class="font-bold text-slate-800 dark:text-slate-200"><?php echo htmlspecialchars($log['username']); ?></span>
-                                                    <?php echo $log['action'] === 'create' ? 'created the task' : 'updated ' . str_replace('_', ' ', $log['action']); ?>
-                                                </p>
-                                                <?php if($log['new_values']): ?>
-                                                    <p class="text-[10px] text-slate-400 italic mt-0.5">New value: <?php echo htmlspecialchars(json_decode($log['new_values'], true)['value'] ?? ''); ?></p>
-                                                <?php endif; ?>
+                                            <div class="text-xs text-slate-600 dark:text-slate-400">
+                                                <?php echo renderTaskActivity($log); ?>
                                             </div>
                                             <div class="whitespace-nowrap text-right text-[10px] font-bold text-slate-400 uppercase">
-                                                <?php echo date('d/m/Y', strtotime($log['created_at'])); ?>
+                                                <time datetime="<?php echo $log['created_at']; ?>">
+                                                    <?php echo date('d/m/Y', strtotime($log['created_at'])); ?>
+                                                </time>
                                             </div>
                                         </div>
                                     </div>
@@ -245,6 +274,9 @@ $priorityColors = [
                         <?php endforeach; ?>
                     </ul>
                 </div>
+                <?php if(empty($logs)): ?>
+                    <p class="text-xs italic text-slate-400 text-center">No activity recorded yet.</p>
+                <?php endif; ?>
             </div>
         </div>
     </div>

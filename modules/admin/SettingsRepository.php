@@ -23,7 +23,8 @@ class SettingsRepository extends Repository
      */
     public function updateSettings(array $settings): bool
     {
-        $this->db->beginTransaction();
+        $useTransaction = !$this->db->inTransaction();
+        if ($useTransaction) $this->db->beginTransaction();
         try {
             $stmt = $this->db->prepare("
                 INSERT INTO system_settings (setting_key, setting_value) 
@@ -37,10 +38,10 @@ class SettingsRepository extends Repository
                 $stmt->execute([$key, $value]);
             }
 
-            $this->db->commit();
+            if ($useTransaction) $this->db->commit();
             return true;
         } catch (\Exception $e) {
-            $this->db->rollBack();
+            if ($useTransaction) $this->db->rollBack();
             throw $e;
         }
     }

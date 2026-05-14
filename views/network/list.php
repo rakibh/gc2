@@ -140,7 +140,9 @@ $sortDir = $data['sort_dir'] ?? 'DESC';
 
         <!-- Pagination -->
         <div class="px-6 py-4 bg-slate-50/50 dark:bg-slate-800/50 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between">
-            <p class="text-xs text-slate-500 dark:text-slate-400">Showing page <span class="font-bold text-slate-800 dark:text-slate-100"><?php echo $currentPage; ?></span> of <span class="font-bold text-slate-800 dark:text-slate-100"><?php echo $totalPages; ?></span> (<?php echo $data['total']; ?> nodes)</p>
+            <p class="text-xs text-slate-500 dark:text-slate-400">
+                Showing page <span class="font-bold text-slate-800 dark:text-slate-100"><?php echo $currentPage; ?></span> of <span class="font-bold text-slate-800 dark:text-slate-100"><?php echo $totalPages; ?></span> (<?php echo $data['total']; ?> nodes)
+            </p>
             <div class="flex space-x-1">
                 <?php for($i = 1; $i <= $totalPages; $i++): ?>
                     <a href="index.php?route=list_network&page=<?php echo $i; ?>&search=<?php echo $filters['search']; ?>&status=<?php echo $filters['status']; ?>" 

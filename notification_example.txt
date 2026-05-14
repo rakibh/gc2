@@ -1,0 +1,24 @@
+TASKS
+Task "{title}" assigned to you by {user}. Due: {date}
+Task "{title}" status changed to {status} by {user}
+Task "{title}" is {hours}h overdue. Priority: {priority}
+Task "{title}" completed by {user}
+Task "{title}" cancelled by {user}
+
+EQUIPMENT & WARRANTY
+New {type} "{label}" added by {user}
+Equipment "{label}" status changed to {status} by {user}
+Warranty for "{label}" expires in {days} days ({date})
+Warranty for "{label}" expired on {date}
+Equipment "{label}" assigned to {person} by {user}
+
+NETWORK
+IP {ip} configured by {user}. MAC: {mac}
+IP {ip} assigned to "{label}" by {user}
+IP {ip} unassigned by {user}
+IP conflict detected for {ip}. Resolve immediately
+
+USER MANAGEMENT
+User {user} created as {role} by {admin}
+Role changed for {user} to {role} by {admin}
+Account {user} deactivated by {admin}

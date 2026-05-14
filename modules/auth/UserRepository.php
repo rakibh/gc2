@@ -33,7 +33,7 @@ class UserRepository extends Repository
         }
 
         $stmt = $this->db->prepare("
-            SELECT id, username, employee_id, first_name, last_name, email, phone, designation, profile_photo, role, status, created_at 
+            SELECT id, username, employee_id, first_name, last_name, email, phone, designation, profile_photo, role, status, force_password_change, created_at 
             FROM users 
             $where
             ORDER BY $sortBy $sortDir 
@@ -87,7 +87,8 @@ class UserRepository extends Repository
      */
     public function createUser(array $data): int
     {
-        $this->db->beginTransaction();
+        $useTransaction = !$this->db->inTransaction();
+        if ($useTransaction) $this->db->beginTransaction();
         try {
             $stmt = $this->db->prepare("
                 INSERT INTO users (username, employee_id, password, first_name, last_name, email, phone, designation, profile_photo, role, status)
@@ -115,18 +116,22 @@ class UserRepository extends Repository
             // Notify Admins
             $adminIds = $this->getAdminIds();
             $notificationRepo = new \Modules\Notifications\NotificationRepository();
+            $performer = \Core\Session::get('username', 'Admin');
+            $role = ucfirst($data['role'] ?? 'user');
+            $msg = "User {$data['username']} created as {$role} by {$performer}";
+            
             $notificationRepo->createForUsers(
                 $adminIds, 
                 'user', 
-                "New user added: " . $data['username'], 
+                $msg, 
                 'medium', 
                 ['user_id' => $userId]
             );
 
-            $this->db->commit();
+            if ($useTransaction) $this->db->commit();
             return $userId;
         } catch (Exception $e) {
-            $this->db->rollBack();
+            if ($useTransaction) $this->db->rollBack();
             throw $e;
         }
     }
@@ -139,7 +144,8 @@ class UserRepository extends Repository
         $oldUser = $this->getUserById($id);
         if (!$oldUser) return false;
 
-        $this->db->beginTransaction();
+        $useTransaction = !$this->db->inTransaction();
+        if ($useTransaction) $this->db->beginTransaction();
         try {
             $fields = [];
             $params = ['id' => $id];
@@ -164,52 +170,39 @@ class UserRepository extends Repository
             }
 
             if (empty($fields)) {
+                if ($useTransaction) $this->db->commit();
                 return true;
             }
 
             $stmt = $this->db->prepare("UPDATE users SET " . implode(', ', $fields) . " WHERE id = :id");
             $stmt->execute($params);
 
-            // Notify Admins if role changed
+            // Notify Admins if role or status changed
+            $notificationRepo = new \Modules\Notifications\NotificationRepository();
+            $performer = \Core\Session::get('username', 'Admin');
+            $adminIds = $this->getAdminIds();
+
             if (isset($data['role']) && $oldUser['role'] !== $data['role']) {
-                $adminIds = $this->getAdminIds();
-                $notificationRepo = new \Modules\Notifications\NotificationRepository();
-                $notificationRepo->createForUsers(
-                    $adminIds, 
-                    'user', 
-                    "User role changed: " . $oldUser['username'] . " is now " . $data['role'], 
-                    'high', 
-                    ['user_id' => $id]
-                );
+                $role = ucfirst($data['role']);
+                $msg = "Role changed for {$oldUser['username']} to {$role} by {$performer}";
+                $notificationRepo->createForUsers($adminIds, 'user', $msg, 'high', ['user_id' => $id]);
+            }
+
+            if (isset($data['status']) && $oldUser['status'] !== $data['status'] && $data['status'] === 'inactive') {
+                $msg = "Account {$oldUser['username']} deactivated by {$performer}";
+                $notificationRepo->createForUsers($adminIds, 'user', $msg, 'high', ['user_id' => $id]);
             }
 
             // Calculate changes for audit log
             $newValues = array_intersect_key(array_merge($oldUser, $data), array_flip($updateable));
             $this->logAudit('update', 'users', $id, $oldUser, $newValues);
 
-            $this->db->commit();
+            if ($useTransaction) $this->db->commit();
             return true;
         } catch (Exception $e) {
-            $this->db->rollBack();
+            if ($useTransaction) $this->db->rollBack();
             throw $e;
         }
-    }
-
-    /**
-     * Get revision history for a user.
-     */
-    public function getRevisionHistory(int $userId): array
-    {
-        $stmt = $this->db->prepare("
-            SELECT a.*, u.username as responsible_user
-            FROM audit_logs a
-            JOIN users u ON a.user_id = u.id
-            WHERE a.target_table = 'users' AND a.target_id = ?
-            ORDER BY a.created_at DESC
-            LIMIT 15
-        ");
-        $stmt->execute([$userId]);
-        return $stmt->fetchAll();
     }
 
     /**
@@ -220,7 +213,8 @@ class UserRepository extends Repository
         $user = $this->getUserById($id);
         if (!$user) return false;
 
-        $this->db->beginTransaction();
+        $useTransaction = !$this->db->inTransaction();
+        if ($useTransaction) $this->db->beginTransaction();
         try {
             $stmt = $this->db->prepare("DELETE FROM users WHERE id = ?");
             $result = $stmt->execute([$id]);
@@ -229,46 +223,19 @@ class UserRepository extends Repository
                 // Notify Admins
                 $adminIds = $this->getAdminIds();
                 $notificationRepo = new \Modules\Notifications\NotificationRepository();
-                $notificationRepo->createForUsers(
-                    $adminIds, 
-                    'user', 
-                    "User deleted: " . $user['username'], 
-                    'high'
-                );
+                $performer = \Core\Session::get('username', 'Admin');
+                $msg = "User {$user['username']} deleted by {$performer}";
+
+                $notificationRepo->createForUsers($adminIds, 'user', $msg, 'high');
                 
                 $this->logAudit('delete', 'users', $id, $user, null);
             }
 
-            $this->db->commit();
+            if ($useTransaction) $this->db->commit();
             return $result;
         } catch (Exception $e) {
-            $this->db->rollBack();
+            if ($useTransaction) $this->db->rollBack();
             throw $e;
-        }
-    }
-
-    /**
-     * Log actions to audit_logs table.
-     */
-    public function logAudit(string $action, string $table, ?int $targetId, ?array $old, ?array $new): void
-    {
-        try {
-            $stmt = $this->db->prepare("
-                INSERT INTO audit_logs (user_id, action, target_table, target_id, old_values, new_values)
-                VALUES (:user_id, :action, :table, :target_id, :old, :new)
-            ");
-            
-            $stmt->execute([
-                'user_id'   => Session::get('user_id'),
-                'action'    => $action,
-                'table'     => $table,
-                'target_id' => $targetId,
-                'old'       => $old ? json_encode($old) : null,
-                'new'       => $new ? json_encode($new) : null
-            ]);
-        } catch (Exception $e) {
-            // Silently log error to PHP logs but don't stop the main transaction
-            error_log("Audit Logging Failed: " . $e->getMessage());
         }
     }
 }

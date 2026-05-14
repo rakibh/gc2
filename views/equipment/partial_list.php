@@ -11,10 +11,15 @@ $statusColors = [
 ?>
 
 <!-- AJAX Meta Info -->
-<div id="ajax-pagination-meta" class="hidden" 
-     data-pages="<?php echo $data['pages']; ?>" 
-     data-current="<?php echo $data['currentPage']; ?>">
-</div>
+<tr class="hidden">
+    <td colspan="100">
+        <div id="equipment-pagination-meta" 
+             data-pages="<?php echo (int)$data['pages']; ?>" 
+             data-current="<?php echo (int)$data['currentPage']; ?>"
+             data-total="<?php echo (int)$data['total']; ?>">
+        </div>
+    </td>
+</tr>
 
 <?php foreach($equipments as $e): ?>
     <tr class="hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition-colors group">

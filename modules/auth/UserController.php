@@ -68,14 +68,15 @@ class UserController
     /**
      * Get revision history for AJAX.
      */
-    public function revisionHistory(int $userId): array
+    public function revisionHistory(int $id): array
     {
         if (Session::get('role') !== 'admin') {
             return ['success' => false, 'message' => 'Unauthorized.'];
         }
+        $table = $_GET['table'] ?? 'users';
         return [
             'success' => true,
-            'revisions' => $this->userRepository->getRevisionHistory($userId)
+            'revisions' => $this->userRepository->getRevisionHistory($table, $id)
         ];
     }
 
@@ -105,9 +106,11 @@ class UserController
 
             if ($userId) {
                 $this->userRepository->updateUser($userId, $data);
+                (new \Modules\Admin\AdminRepository())->logEvent('info', 'user', "User updated: " . ($data['username'] ?? $userId), ['target_user_id' => $userId]);
                 $msg = 'User updated successfully.';
             } else {
-                $this->userRepository->createUser($data);
+                $newId = $this->userRepository->createUser($data);
+                (new \Modules\Admin\AdminRepository())->logEvent('info', 'user', "New user created: " . $data['username'], ['target_user_id' => $newId]);
                 $msg = 'User created successfully.';
             }
 

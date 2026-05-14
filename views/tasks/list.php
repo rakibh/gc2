@@ -285,12 +285,13 @@ $priorityColors = [
     <?php endif; ?>
 
     <!-- Unified Pagination -->
-    <div class="mt-8 bg-white dark:bg-slate-900 rounded-3xl border border-slate-100 dark:border-slate-800 shadow-sm overflow-hidden flex items-center justify-between px-6 py-4 transition-colors" x-show="totalPages > 1">
-        <p class="text-xs text-slate-500 dark:text-slate-400 font-bold uppercase tracking-widest">
-            Showing page <span class="text-blue-600" x-text="currentPage"></span> of <span x-text="totalPages"></span> (<?php echo $data['total']; ?> total tasks)
+    <?php if ($activeTab === 'all'): ?>
+    <div class="mt-8 bg-white dark:bg-slate-900 rounded-3xl border border-slate-100 dark:border-slate-800 shadow-sm overflow-hidden flex items-center justify-between px-6 py-4 transition-colors">
+        <p class="text-xs text-slate-500 dark:text-slate-400">
+            Showing page <span class="font-bold text-slate-800 dark:text-slate-100" x-text="currentPage"></span> of <span class="font-bold text-slate-800 dark:text-slate-100" x-text="totalPages"></span> (<?php echo $data['total']; ?> tasks)
         </p>
         <div class="flex space-x-1">
-            <template x-for="p in totalPages" :key="p">
+            <template x-for="p in Array.from({length: totalPages}, (v, i) => i + 1)" :key="p">
                 <button @click="goToPage(p)" 
                         class="w-8 h-8 flex items-center justify-center rounded-lg text-xs font-bold transition-all border"
                         :class="p === currentPage ? 'bg-blue-600 text-white shadow-md border-blue-600' : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 border-slate-200 dark:border-slate-700'">
@@ -299,6 +300,7 @@ $priorityColors = [
             </template>
         </div>
     </div>
+    <?php endif; ?>
 </div>
 
 <script>

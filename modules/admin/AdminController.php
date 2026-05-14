@@ -44,11 +44,10 @@ class AdminController
 
         $page = (int)($_GET['page'] ?? 1);
         $filters = [
-            'level' => $_GET['level'] ?? null,
-            'category' => $_GET['category'] ?? null,
-            'date_from' => $_GET['date_from'] ?? null,
-            'date_to' => $_GET['date_to'] ?? null,
-            'search' => $_GET['search'] ?? null,
+            'level' => isset($_GET['level']) ? trim($_GET['level']) : null,
+            'category' => isset($_GET['category']) ? trim($_GET['category']) : null,
+            'date_from' => isset($_GET['date_from']) ? trim($_GET['date_from']) : null,
+            'date_to' => isset($_GET['date_to']) ? trim($_GET['date_to']) : null,
         ];
 
         // Handle Export
@@ -57,7 +56,10 @@ class AdminController
             exit;
         }
 
-        $res = $this->adminRepository->getLogs($page, 50, $filters);
+        $settingsRepo = new SettingsRepository();
+        $limit = (int)$settingsRepo->get('records_per_page', 20);
+
+        $res = $this->adminRepository->getLogs($page, $limit, $filters);
 
         return [
             'title' => 'System Logs',

@@ -17,8 +17,12 @@ class GlobalSearchController
 
     public function search(): array
     {
+        if (!\Core\Session::get('user_id')) {
+            return ['success' => false, 'message' => 'Unauthorized'];
+        }
+
         try {
-            $query = $_GET['q'] ?? '';
+            $query = trim($_GET['q'] ?? '');
             if (strlen($query) < 2) {
                 return ['success' => true, 'results' => []];
             }

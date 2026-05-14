@@ -115,8 +115,9 @@ $desktopNotifications = Session::get('user_desktop_notifications', false);
                                 if (this.notifications.enabled && Notification.permission === 'granted') {
                                     data.recent.forEach(n => {
                                         if (parseInt(n.id) > this.notifications.last_id && this.isTypeAllowed(n.type)) {
+                                            const title = n.type.replace(/_/g, ' ').split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ') + ' Alert';
                                             this.showNativeNotification(
-                                                n.type.charAt(0).toUpperCase() + n.type.slice(1) + ' Alert',
+                                                title,
                                                 n.message,
                                                 n
                                             );
@@ -167,36 +168,18 @@ $desktopNotifications = Session::get('user_desktop_notifications', false);
 
                     // Determine redirect URL
                     let url = 'index.php?route=list_notifications';
-                    if (n.type === 'task' && n.data) {
-                        try {
-                            const data = typeof n.data === 'string' ? JSON.parse(n.data) : n.data;
-                            if (data.task_id) {
-                                url = `index.php?route=view_task&id=${data.task_id}`;
-                            }
-                        } catch (e) {}
-                    } else if (n.type === 'equipment' && n.data) {
-                        try {
-                            const data = typeof n.data === 'string' ? JSON.parse(n.data) : n.data;
-                            if (data.equipment_id) {
-                                url = `index.php?route=view_equipment&id=${data.equipment_id}`;
-                            }
-                        } catch (e) {}
-                    } else if (n.type === 'network' && n.data) {
-                        try {
-                            const data = typeof n.data === 'string' ? JSON.parse(n.data) : n.data;
-                            if (data.network_id) {
-                                url = `index.php?route=view_network&id=${data.network_id}`;
-                            }
-                        } catch (e) {}
+                    const data = typeof n.data === 'string' ? JSON.parse(n.data || '{}') : (n.data || {});
+
+                    if (n.type.startsWith('task') && data.task_id) {
+                        url = `index.php?route=view_task&id=${data.task_id}`;
+                    } else if (n.type === 'equipment' && data.equipment_id) {
+                        url = `index.php?route=view_equipment&id=${data.equipment_id}`;
+                    } else if (n.type === 'network' && data.network_id) {
+                        url = `index.php?route=view_network&id=${data.network_id}`;
                     } else if (n.type === 'user') {
                         url = 'index.php?route=list_users';
-                    } else if (n.type === 'warranty' && n.data) {
-                        try {
-                            const data = typeof n.data === 'string' ? JSON.parse(n.data) : n.data;
-                            if (data.equipment_id) {
-                                url = `index.php?route=view_equipment&id=${data.equipment_id}`;
-                            }
-                        } catch (e) {}
+                    } else if (n.type === 'warranty' && data.equipment_id) {
+                        url = `index.php?route=view_equipment&id=${data.equipment_id}`;
                     }
 
                     window.location.href = url;
@@ -303,5 +286,23 @@ $desktopNotifications = Session::get('user_desktop_notifications', false);
             </main>
         </div>
     </div>
+    <!-- Global Confirmation Modal -->
+    <template x-teleport="body">
+        <div x-show="$store.app.confirmModal.show" class="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm" x-cloak x-transition>
+            <div class="bg-white dark:bg-slate-900 w-full max-w-md rounded-3xl shadow-2xl border border-slate-100 dark:border-slate-800 overflow-hidden" @click.away="$store.app.confirmModal.show = false">
+                <div class="p-8 text-center">
+                    <div class="w-16 h-16 bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 rounded-full flex items-center justify-center mx-auto mb-4">
+                        <i class="bi bi-exclamation-triangle-fill text-3xl"></i>
+                    </div>
+                    <h3 class="text-xl font-bold text-slate-900 dark:text-slate-100 mb-2" x-text="$store.app.confirmModal.title"></h3>
+                    <p class="text-sm text-slate-500 dark:text-slate-400" x-text="$store.app.confirmModal.message"></p>
+                </div>
+                <div class="px-8 py-6 bg-slate-50 dark:bg-slate-800/50 border-t border-slate-100 dark:border-slate-800 flex justify-center gap-3">
+                    <button @click="$store.app.confirmModal.show = false" class="px-6 py-2.5 rounded-xl text-sm font-bold text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-all">Cancel</button>
+                    <button @click="if($store.app.confirmModal.onConfirm) $store.app.confirmModal.onConfirm(); $store.app.confirmModal.show = false" class="bg-red-600 hover:bg-red-700 text-white px-8 py-2.5 rounded-xl text-sm font-bold shadow-lg shadow-red-500/20 transition-all">Confirm</button>
+                </div>
+            </div>
+        </div>
+    </template>
 </body>
 </html>
